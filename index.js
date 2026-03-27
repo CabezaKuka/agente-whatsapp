@@ -11,11 +11,12 @@ const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // ── CATÁLOGO ──────────────────────────────────────────────────────────────
 // Editá esto con tus máquinas reales
 const CATALOGO = `
-Equipo: CLASIFICADORA DE GRANOS | Precio: $5.500 | Descripción: 3 zarandas intercambiables, motores 3.5HP, variador de velocidad electrónico, producción promedio 2500 kg/hora, alimentación monofásica 220V. Incluye ciclón para recepción de basura.
-Equipo: ZARANDAS MANUALES | Precio: $25 | Descripción: Para laboratorio y muestras. Variedad de perforaciones redondas y oblongas. Dimensiones 30x25 cm.
-Equipo: MH-5 MEDIDOR DE HUMEDAD | Precio: $230 | Descripción: Para granos: soya, maíz, sorgo, girasol y otros. Precisión +-0.6%. Batería recargable. Pantalla OLED. No mide castaña, cacao ni café.
-Equipo: CUARTEADOR 12CM | Precio: $400 | Descripción: 12 canales de 19mm. Acero inoxidable. Tres bandejas de recepción.
-Equipo: TRILLADORA ENSAYOS | Precio: $2.400 | Descripción: Para maíz, sorgo, soya, trigo. Motor estacionario de 6.5HP o eléctrico.
+Equipo: CLASIFICADORA DE GRANOS CG-3 | Precio: $3.900 | Descripción: 3 zarandas intercambiables, motor 1.5HP, producción promedio 2500 kg/hora, alimentación monofásica 220V. Solo clasifica, no tiene aire para limpieza. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní, orégano.
+Equipo: CLASIFICADORA DE GRANOS CG-3E | Precio: $5.500 | Descripción: 3 zarandas intercambiables, motores 3.5HP (1.5HP cajón vibrador + 2HP aspirador), variador de velocidad electrónico, producción promedio 2500 kg/hora, alimentación monofásica 220V. Incluye ciclón para recepción de basura. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní.
+Equipo: ZARANDAS MANUALES | Precio: 230 Bs | Descripción: Para laboratorio y muestras. Variedad de perforaciones redondas y oblongas. Dimensiones 30x25 cm. Son apilables.
+Equipo: MH-5 MEDIDOR DE HUMEDAD | Precio: 2.200 Bs | Descripción: Para granos: soya, maíz, sorgo, girasol y otros. Precisión +-0.6%. Batería recargable, pantalla OLED, tapa de presión con aviso sonoro. Incluye estuche. No mide castaña, cacao ni café.
+Equipo: CUARTEADOR 12CM | Precio: 3.500 Bs | Descripción: 12 canales de 19mm, fabricado en acero inoxidable, tres bandejas de recepción. No apto para áridos.
+Equipo: TRILLADORA ENSAYOS | Precio: $2.400 | Descripción: Para maíz, sorgo, soya, trigo. Motor estacionario 6.5HP o eléctrico. Cóncavo regulable, tapa regulable, ventilador incorporado, montada sobre ruedas. Ideal para pequeñas parcelas o líneas de muestras.
 `;
 // ─────────────────────────────────────────────────────────────────────────
 
