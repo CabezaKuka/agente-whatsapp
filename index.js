@@ -11,9 +11,11 @@ const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // ── CATÁLOGO ──────────────────────────────────────────────────────────────
 // Editá esto con tus máquinas reales
 const CATALOGO = `
-Modelo: Clasificadora X200 | Precio: $5.000 | Descripción: Clasificadora de granos | Stock: disponible
-Modelo: Zaranda Z500 | Precio: $8.500 | Descripción: Zaranda vibratoria industrial | Stock: disponible
-Modelo: Elevador E100 | Precio: $3.200 | Descripción: Elevador de cangilones | Stock: consultar
+Equipo: CLASIFICADORA DE GRANOS | Precio: $5.500 | Descripción: 3 zarandas intercambiables, motores 3.5HP, variador de velocidad electrónico, producción promedio 2500 kg/hora, alimentación monofásica 220V. Incluye ciclón para recepción de basura.
+Equipo: ZARANDAS MANUALES | Precio: $25 | Descripción: Para laboratorio y muestras. Variedad de perforaciones redondas y oblongas. Dimensiones 30x25 cm.
+Equipo: MH-5 MEDIDOR DE HUMEDAD | Precio: $230 | Descripción: Para granos: soya, maíz, sorgo, girasol y otros. Precisión +-0.6%. Batería recargable. Pantalla OLED. No mide castaña, cacao ni café.
+Equipo: CUARTEADOR 12CM | Precio: $400 | Descripción: 12 canales de 19mm. Acero inoxidable. Tres bandejas de recepción.
+Equipo: TRILLADORA ENSAYOS | Precio: $2.400 | Descripción: Para maíz, sorgo, soya, trigo. Motor estacionario de 6.5HP o eléctrico.
 `;
 // ─────────────────────────────────────────────────────────────────────────
 
