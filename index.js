@@ -3,13 +3,14 @@ const bodyParser = require('body-parser');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
-app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const WA_TOKEN     = process.env.WA_TOKEN;
+const WA_PHONE_ID  = process.env.WA_PHONE_ID;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'miagente2024';
 
 // ── CATÁLOGO ──────────────────────────────────────────────────────────────
-// Editá esto con tus máquinas reales
 const CATALOGO = `
 Equipo: CLASIFICADORA DE GRANOS CG-3 | Precio: $3.900 | Descripción: 3 zarandas intercambiables, motor 1.5HP, producción promedio 2500 kg/hora, alimentación monofásica 220V. Solo clasifica, no tiene aire para limpieza. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní, orégano.
 Equipo: CLASIFICADORA DE GRANOS CG-3E | Precio: $5.500 | Descripción: 3 zarandas intercambiables, motores 3.5HP (1.5HP cajón vibrador + 2HP aspirador), variador de velocidad electrónico, producción promedio 2500 kg/hora, alimentación monofásica 220V. Incluye ciclón para recepción de basura. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní.
@@ -36,20 +37,37 @@ ${CATALOGO}`;
 // Historial por número de teléfono
 const conversaciones = {};
 
-// ── RECEPCIÓN DE MENSAJES DE TWILIO ───────────────────────────────────────
-app.post('/whatsapp', async (req, res) => {
-  const from = req.body.From;
-  const text = req.body.Body;
-
-  console.log(`📩 Mensaje de ${from}: ${text}`);
-
-  if (!conversaciones[from]) conversaciones[from] = [];
-  conversaciones[from].push({ role: 'user', content: text });
-  if (conversaciones[from].length > 20) {
-    conversaciones[from] = conversaciones[from].slice(-20);
+// ── VERIFICACIÓN DEL WEBHOOK ──────────────────────────────────────────────
+app.get('/webhook', (req, res) => {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('✅ Webhook verificado');
+    res.status(200).send(challenge);
+  } else {
+    console.log('❌ Token incorrecto');
+    res.sendStatus(403);
   }
+});
 
+// ── RECEPCIÓN DE MENSAJES DE META ─────────────────────────────────────────
+app.post('/webhook', async (req, res) => {
+  res.sendStatus(200);
   try {
+    const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    if (!msg || msg.type !== 'text') return;
+
+    const from = msg.from;
+    const text = msg.text.body;
+    console.log(`📩 Mensaje de ${from}: ${text}`);
+
+    if (!conversaciones[from]) conversaciones[from] = [];
+    conversaciones[from].push({ role: 'user', content: text });
+    if (conversaciones[from].length > 20) {
+      conversaciones[from] = conversaciones[from].slice(-20);
+    }
+
     const respuesta = await ai.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 500,
@@ -60,29 +78,34 @@ app.post('/whatsapp', async (req, res) => {
     const reply = respuesta.content[0].text;
     conversaciones[from].push({ role: 'assistant', content: reply });
 
-    console.log(`✅ Respuesta: ${reply}`);
-
-    res.set('Content-Type', 'text/xml');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>
-    <Body>${reply.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</Body>
-  </Message>
-</Response>`);
+    await enviarMensaje(from, reply);
+    console.log(`✅ Respuesta enviada a ${from}`);
 
   } catch (err) {
     console.error('❌ Error:', err.message);
-    res.set('Content-Type', 'text/xml');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>
-    <Body>Lo siento, hubo un error. Por favor intentá de nuevo.</Body>
-  </Message>
-</Response>`);
   }
 });
 
+// ── ENVIAR MENSAJE ────────────────────────────────────────────────────────
+async function enviarMensaje(para, texto) {
+  const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${WA_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: para,
+      type: 'text',
+      text: { body: texto }
+    })
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(JSON.stringify(error));
+  }
+}
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor activo en puerto ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Servidor activo en puerto ${PORT}`));
