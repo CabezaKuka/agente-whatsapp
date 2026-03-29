@@ -19,7 +19,6 @@ Equipo: MH-5 MEDIDOR DE HUMEDAD | Precio: 2.200 Bs | Descripción: Para granos: 
 Equipo: CUARTEADOR 12CM | Precio: 3.500 Bs | Descripción: 12 canales de 19mm, fabricado en acero inoxidable, tres bandejas de recepción. No apto para áridos.
 Equipo: TRILLADORA ENSAYOS | Precio: $2.400 | Descripción: Para maíz, sorgo, soya, trigo. Motor estacionario 6.5HP o eléctrico. Cóncavo regulable, tapa regulable, ventilador incorporado, montada sobre ruedas. Ideal para pequeñas parcelas o líneas de muestras.
 `;
-// ─────────────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
 Respondés como una persona real, nunca te identificás como bot ni asistente virtual.
@@ -28,12 +27,17 @@ Si el cliente pregunta poco, respondés poco. Si profundiza, profundizás vos ta
 Nunca usás viñetas, listas ni texto largo. Todo en lenguaje natural y conversacional.
 Si el cliente saluda, saludás y preguntás en qué podés ayudar, sin presentarte.
 Si quiere hacer un pedido o hablar con alguien, le decís que contacte al 76317951.
-SOLO usás info del catálogo. Si algo no está, lo decís con naturalidad.
+SOLO usás info del catálogo y la información del negocio. Si algo no está, lo decís con naturalidad.
+
+INFORMACIÓN DEL NEGOCIO:
+- Hacemos envíos a todo el país.
+- Fábrica en Santa Cruz de la Sierra.
+- Horario de atención: Lunes a viernes de 7:00 a 11:00.
+- Si el cliente pregunta por la ubicación, dirección o cómo llegar, respondé EXACTAMENTE con esta palabra clave: [ENVIAR_UBICACION]
 
 CATÁLOGO DE EQUIPOS:
 ${CATALOGO}`;
 
-// Historial por número de teléfono
 const conversaciones = {};
 
 // ── VERIFICACIÓN DEL WEBHOOK ──────────────────────────────────────────────
@@ -50,7 +54,7 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// ── RECEPCIÓN DE MENSAJES DE META ─────────────────────────────────────────
+// ── RECEPCIÓN DE MENSAJES ─────────────────────────────────────────────────
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
   try {
@@ -74,18 +78,32 @@ app.post('/webhook', async (req, res) => {
       messages: conversaciones[from]
     });
 
-    const reply = respuesta.content[0].text;
+    let reply = respuesta.content[0].text;
     conversaciones[from].push({ role: 'assistant', content: reply });
 
-    await enviarMensaje(from, reply);
-    console.log(`✅ Respuesta enviada a ${from}`);
+    // Si el agente quiere enviar la ubicación
+    if (reply.includes('[ENVIAR_UBICACION]')) {
+      const textoSinTag = reply.replace('[ENVIAR_UBICACION]', '').trim();
+      
+      // Enviar texto primero (si hay algo además del tag)
+      if (textoSinTag) {
+        await enviarMensaje(from, textoSinTag);
+      }
+      
+      // Enviar ubicación GPS
+      await enviarUbicacion(from);
+      console.log(`✅ Ubicación enviada a ${from}`);
+    } else {
+      await enviarMensaje(from, reply);
+      console.log(`✅ Respuesta enviada a ${from}`);
+    }
 
   } catch (err) {
     console.error('❌ Error:', err.message);
   }
 });
 
-// ── ENVIAR MENSAJE ────────────────────────────────────────────────────────
+// ── ENVIAR MENSAJE DE TEXTO ───────────────────────────────────────────────
 async function enviarMensaje(para, texto) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
@@ -98,6 +116,32 @@ async function enviarMensaje(para, texto) {
       to: para,
       type: 'text',
       text: { body: texto }
+    })
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(JSON.stringify(error));
+  }
+}
+
+// ── ENVIAR UBICACIÓN GPS ──────────────────────────────────────────────────
+async function enviarUbicacion(para) {
+  const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${WA_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: para,
+      type: 'location',
+      location: {
+        latitude: -17.748285,
+        longitude: -63.133169,
+        name: 'Servicio Industrial Cruceño',
+        address: 'Santa Cruz de la Sierra, Bolivia'
+      }
     })
   });
   if (!res.ok) {
