@@ -10,6 +10,9 @@ const WA_TOKEN     = process.env.WA_TOKEN;
 const WA_PHONE_ID  = process.env.WA_PHONE_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'miagente2024';
 
+// ── NÚMERO PARA NOTIFICACIONES ────────────────────────────────────────────
+const NOTIFICAR_A = '59177626675'; // Tu WhatsApp personal
+
 // ── FOLLETOS (imágenes PNG) ───────────────────────────────────────────────
 const FOLLETOS = {
   clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
@@ -26,7 +29,7 @@ Equipo: ZARANDAS MANUALES | Precio: 230 Bolivianos | Descripción: Para laborato
 Equipo: MH-5 MEDIDOR DE HUMEDAD | Precio: 2.200 Bolivianos | Descripción: Para granos: soya, maíz, sorgo, girasol y otros. Precisión +-0.6%. Batería recargable, pantalla OLED, tapa de presión con aviso sonoro. Incluye estuche. No mide castaña, cacao ni café.
 Equipo: CUARTEADOR 12CM | Precio: 3.500 Bolivianos | Descripción: 12 canales de 19mm, fabricado en acero inoxidable, tres bandejas de recepción. No apto para áridos.
 Equipo: TRILLADORA ENSAYOS | Precio: 2.400 dolares | Descripción: Para maíz, sorgo, soya, trigo. Motor estacionario 6.5HP o eléctrico. Cóncavo regulable, tapa regulable, ventilador incorporado, montada sobre ruedas. Ideal para pequeñas parcelas o líneas de muestras.
-Equipo: MOLINO 20 MARTILLOS | Precio: 4.750 Bolvianos | Descripción: 20 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 80-100 kg harina, 400 kg con cedazo 3mm, 700 kg con 5mm, 800 kg con 12mm. Con ciega: 1000-2000 kg/hora. Motor requerido eléctrico 5HP o gasolina 9HP. No incluye motor. Incluye base de motor.
+Equipo: MOLINO 20 MARTILLOS | Precio: 4.750 Bolivianos | Descripción: 20 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 80-100 kg harina, 400 kg con cedazo 3mm, 700 kg con 5mm, 800 kg con 12mm. Con ciega: 1000-2000 kg/hora. Motor requerido eléctrico 5HP o gasolina 9HP. No incluye motor. Incluye base de motor.
 Equipo: MOLINO 20 MARTILLOS CON CICLÓN | Precio: 6.150 Bolivianos | Descripción: 20 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 80-100 kg harina, 400 kg con cedazo 3mm, 700 kg con 5mm, 800 kg con 12mm. Con ciega: 1000-2000 kg/hora. Motor requerido eléctrico trifásico 7.5HP o gasolina 11HP. No incluye motor. Incluye base de motor, extractor y ciclón.
 Equipo: MOLINO 24 MARTILLOS | Precio: 6.550 Bolivianos | Descripción: 24 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 150 kg harina, 600 kg con cedazo 3mm, 800 kg con 5mm, 1000 kg con 12mm. Con ciega: 2500 kg/hora. Motor requerido eléctrico trifásico 12.5HP o gasolina 13HP. No incluye motor. Incluye base de motor.
 Equipo: MOLINO 24 MARTILLOS CON CICLÓN | Precio: 7.900 Bolivianos | Descripción: 24 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 150 kg harina, 600 kg con cedazo 3mm, 800 kg con 5mm, 1200 kg con 12mm. Con ciega: 2500 kg/hora. Motor requerido eléctrico trifásico 12.5HP o gasolina 13HP. No incluye motor. Incluye base de motor, extractor y ciclón.
@@ -85,6 +88,7 @@ app.post('/webhook', async (req, res) => {
     // Audio
     if (msg.type === 'audio') {
       await enviarMensaje(from, 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊');
+      await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
       return;
     }
 
@@ -96,6 +100,9 @@ app.post('/webhook', async (req, res) => {
 
     const text = msg.text.body;
     console.log(`📩 Mensaje de ${from}: ${text}`);
+
+    // Notificar mensaje entrante
+    await enviarMensaje(NOTIFICAR_A, `📩 Nuevo mensaje de +${from}:\n"${text}"`);
 
     if (!conversaciones[from]) conversaciones[from] = [];
     conversaciones[from].push({ role: 'user', content: text });
