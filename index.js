@@ -139,7 +139,7 @@ async function enviarUbicacion(para) {
       location: {
         latitude: -17.748285,
         longitude: -63.133169,
-        name: 'Servicio Industrial Cruceño',
+        name: 'Nuestra ubicacion',
         address: 'Santa Cruz de la Sierra, Bolivia'
       }
     })
