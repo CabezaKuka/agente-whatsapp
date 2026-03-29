@@ -138,9 +138,7 @@ async function enviarUbicacion(para) {
       type: 'location',
       location: {
         latitude: -17.748285,
-        longitude: -63.133169,
-        name: 'Nuestra ubicacion',
-        address: 'Santa Cruz de la Sierra, Bolivia'
+        longitude: -63.133169
       }
     })
   });
