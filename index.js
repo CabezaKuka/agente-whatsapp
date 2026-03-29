@@ -10,6 +10,13 @@ const WA_TOKEN     = process.env.WA_TOKEN;
 const WA_PHONE_ID  = process.env.WA_PHONE_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'miagente2024';
 
+// ── FOLLETOS ──────────────────────────────────────────────────────────────
+const FOLLETOS = {
+  clasificadora: 'https://drive.google.com/uc?export=download&id=12ZuOuHpzXtUVyeY1VALwgEFlmoZYGD1H',
+  mh5:          'https://drive.google.com/uc?export=download&id=1cJ1ygKjzgqwGItAJMPawS7SX0F4idnk6',
+  zaranda:      'https://drive.google.com/uc?export=download&id=1FzqwbiT1wz3UZ6iHTrsJOkIf05Ak-OMz',
+};
+
 // ── CATÁLOGO ──────────────────────────────────────────────────────────────
 const CATALOGO = `
 Equipo: CLASIFICADORA DE GRANOS CG-3 | Precio: $3.900 | Descripción: 3 zarandas intercambiables, motor 1.5HP, producción promedio 2500 kg/hora, alimentación monofásica 220V. Solo clasifica, no tiene aire para limpieza. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní, orégano.
@@ -34,6 +41,12 @@ INFORMACIÓN DEL NEGOCIO:
 - Fábrica en Santa Cruz de la Sierra.
 - Horario de atención: Lunes a viernes de 7:00 a 11:00.
 - Si el cliente pregunta por ubicación, dirección, dónde están, cómo llegar, dónde queda, o cualquier variante, respondé primero con un mensaje breve indicando cómo identificar el lugar y luego escribí [ENVIAR_UBICACION]. Ejemplo: "Te mando la ubicación exacta, somos el galpón blanco con barda gris 🏭 [ENVIAR_UBICACION]"
+
+FOLLETOS DISPONIBLES — cuando el cliente pida más info, folleto, ficha técnica o catálogo de un equipo, respondé con una frase corta y la palabra clave correspondiente:
+- Clasificadora CG-3 o CG-3E: [FOLLETO_CLASIFICADORA]
+- Medidor de humedad MH-5: [FOLLETO_MH5]
+- Zarandas manuales: [FOLLETO_ZARANDA]
+Ejemplo: "Te mando la ficha técnica 👇 [FOLLETO_CLASIFICADORA]"
 
 CATÁLOGO DE EQUIPOS:
 ${CATALOGO}`;
@@ -81,61 +94,61 @@ app.post('/webhook', async (req, res) => {
     let reply = respuesta.content[0].text;
     conversaciones[from].push({ role: 'assistant', content: reply });
 
-    // Si el agente quiere enviar la ubicación
+    // Ubicación
     if (reply.includes('[ENVIAR_UBICACION]')) {
-      const textoSinTag = reply.replace('[ENVIAR_UBICACION]', '').trim();
-      
-      // Enviar texto primero (si hay algo además del tag)
-      if (textoSinTag) {
-        await enviarMensaje(from, textoSinTag);
-      }
-      
-      // Enviar ubicación GPS
+      const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
+      if (texto) await enviarMensaje(from, texto);
       await enviarUbicacion(from);
-      console.log(`✅ Ubicación enviada a ${from}`);
+
+    // Folleto clasificadora
+    } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
+      const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
+      if (texto) await enviarMensaje(from, texto);
+      await enviarDocumento(from, FOLLETOS.clasificadora, 'Clasificadora_CG3.pdf');
+
+    // Folleto MH5
+    } else if (reply.includes('[FOLLETO_MH5]')) {
+      const texto = reply.replace('[FOLLETO_MH5]', '').trim();
+      if (texto) await enviarMensaje(from, texto);
+      await enviarDocumento(from, FOLLETOS.mh5, 'Medidor_Humedad_MH5.pdf');
+
+    // Folleto zaranda
+    } else if (reply.includes('[FOLLETO_ZARANDA]')) {
+      const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
+      if (texto) await enviarMensaje(from, texto);
+      await enviarDocumento(from, FOLLETOS.zaranda, 'Zarandas_Manuales.pdf');
+
+    // Respuesta normal
     } else {
       await enviarMensaje(from, reply);
-      console.log(`✅ Respuesta enviada a ${from}`);
     }
+
+    console.log(`✅ Respuesta enviada a ${from}`);
 
   } catch (err) {
     console.error('❌ Error:', err.message);
   }
 });
 
-// ── ENVIAR MENSAJE DE TEXTO ───────────────────────────────────────────────
+// ── ENVIAR TEXTO ──────────────────────────────────────────────────────────
 async function enviarMensaje(para, texto) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${WA_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: para,
-      type: 'text',
-      text: { body: texto }
+      messaging_product: 'whatsapp', to: para, type: 'text', text: { body: texto }
     })
   });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(JSON.stringify(error));
-  }
+  if (!res.ok) throw new Error(JSON.stringify(await res.json()));
 }
 
-// ── ENVIAR UBICACIÓN GPS ──────────────────────────────────────────────────
+// ── ENVIAR UBICACIÓN ──────────────────────────────────────────────────────
 async function enviarUbicacion(para) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${WA_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: para,
-      type: 'location',
+      messaging_product: 'whatsapp', to: para, type: 'location',
       location: {
         latitude: -17.748285,
         longitude: -63.133169,
@@ -144,10 +157,20 @@ async function enviarUbicacion(para) {
       }
     })
   });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(JSON.stringify(error));
-  }
+  if (!res.ok) throw new Error(JSON.stringify(await res.json()));
+}
+
+// ── ENVIAR DOCUMENTO ──────────────────────────────────────────────────────
+async function enviarDocumento(para, url, nombre) {
+  const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp', to: para, type: 'document',
+      document: { link: url, filename: nombre }
+    })
+  });
+  if (!res.ok) throw new Error(JSON.stringify(await res.json()));
 }
 
 const PORT = process.env.PORT || 3000;
