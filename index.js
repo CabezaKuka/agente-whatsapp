@@ -10,11 +10,12 @@ const WA_TOKEN     = process.env.WA_TOKEN;
 const WA_PHONE_ID  = process.env.WA_PHONE_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'miagente2024';
 
-// ── FOLLETOS ──────────────────────────────────────────────────────────────
+// ── FOLLETOS (imágenes PNG) ───────────────────────────────────────────────
 const FOLLETOS = {
-  clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.pdf',
-  mh5:          'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5.pdf',
-  zaranda:      'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/ZARANDAMANUAL.pdf',
+  clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
+  mh5_1:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
+  mh5_2:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
+  zaranda:      'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/zarandas-manuales.png',
 };
 
 // ── CATÁLOGO ──────────────────────────────────────────────────────────────
@@ -104,19 +105,20 @@ app.post('/webhook', async (req, res) => {
     } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
       const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
       if (texto) await enviarMensaje(from, texto);
-      await enviarDocumento(from, FOLLETOS.clasificadora, 'Clasificadora_CG3.pdf');
+      await enviarImagen(from, FOLLETOS.clasificadora);
 
-    // Folleto MH5
+    // Folleto MH5 (2 imágenes)
     } else if (reply.includes('[FOLLETO_MH5]')) {
       const texto = reply.replace('[FOLLETO_MH5]', '').trim();
       if (texto) await enviarMensaje(from, texto);
-      await enviarDocumento(from, FOLLETOS.mh5, 'Medidor_Humedad_MH5.pdf');
+      await enviarImagen(from, FOLLETOS.mh5_1);
+      await enviarImagen(from, FOLLETOS.mh5_2);
 
     // Folleto zaranda
     } else if (reply.includes('[FOLLETO_ZARANDA]')) {
       const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
       if (texto) await enviarMensaje(from, texto);
-      await enviarDocumento(from, FOLLETOS.zaranda, 'Zarandas_Manuales.pdf');
+      await enviarImagen(from, FOLLETOS.zaranda);
 
     // Respuesta normal
     } else {
@@ -160,14 +162,14 @@ async function enviarUbicacion(para) {
   if (!res.ok) throw new Error(JSON.stringify(await res.json()));
 }
 
-// ── ENVIAR DOCUMENTO ──────────────────────────────────────────────────────
-async function enviarDocumento(para, url, nombre) {
+// ── ENVIAR IMAGEN ─────────────────────────────────────────────────────────
+async function enviarImagen(para, url) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      messaging_product: 'whatsapp', to: para, type: 'document',
-      document: { link: url, filename: nombre }
+      messaging_product: 'whatsapp', to: para, type: 'image',
+      image: { link: url }
     })
   });
   if (!res.ok) throw new Error(JSON.stringify(await res.json()));
