@@ -79,7 +79,7 @@ app.post('/webhook', async (req, res) => {
 
     // Audio
     if (msg.type === 'audio') {
-      await enviarMensaje(from, 'Por el momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊');
+      await enviarMensaje(from, 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊');
       return;
     }
 
