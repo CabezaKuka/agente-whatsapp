@@ -33,7 +33,7 @@ INFORMACIÓN DEL NEGOCIO:
 - Hacemos envíos a todo el país.
 - Fábrica en Santa Cruz de la Sierra.
 - Horario de atención: Lunes a viernes de 7:00 a 11:00.
-- Si el cliente pregunta por la ubicación, dirección o cómo llegar, respondé EXACTAMENTE con esta palabra clave: [ENVIAR_UBICACION]
+- Si el cliente pregunta por ubicación, dirección, dónde están, cómo llegar, dónde queda, o cualquier variante, respondé primero con un mensaje breve indicando cómo identificar el lugar y luego escribí [ENVIAR_UBICACION]. Ejemplo: "Te mando la ubicación exacta, somos el galpón blanco con barda gris 🏭 [ENVIAR_UBICACION]"
 
 CATÁLOGO DE EQUIPOS:
 ${CATALOGO}`;
