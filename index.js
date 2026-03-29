@@ -12,9 +12,9 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'miagente2024';
 
 // ── FOLLETOS ──────────────────────────────────────────────────────────────
 const FOLLETOS = {
-  clasificadora: 'https://drive.google.com/uc?export=download&id=12ZuOuHpzXtUVyeY1VALwgEFlmoZYGD1H',
-  mh5:          'https://drive.google.com/uc?export=download&id=1cJ1ygKjzgqwGItAJMPawS7SX0F4idnk6',
-  zaranda:      'https://drive.google.com/uc?export=download&id=1FzqwbiT1wz3UZ6iHTrsJOkIf05Ak-OMz',
+  clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.pdf',
+  mh5:          'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5.pdf',
+  zaranda:      'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/ZARANDAMANUAL.pdf',
 };
 
 // ── CATÁLOGO ──────────────────────────────────────────────────────────────
