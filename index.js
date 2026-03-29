@@ -73,9 +73,22 @@ app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
   try {
     const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!msg || msg.type !== 'text') return;
+    if (!msg) return;
 
     const from = msg.from;
+
+    // Audio
+    if (msg.type === 'audio') {
+      await enviarMensaje(from, 'Por el momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊');
+      return;
+    }
+
+    // Otros tipos que no son texto
+    if (msg.type !== 'text') {
+      await enviarMensaje(from, 'Solo puedo responder mensajes de texto por ahora. Escribime tu consulta 😊');
+      return;
+    }
+
     const text = msg.text.body;
     console.log(`📩 Mensaje de ${from}: ${text}`);
 
