@@ -1,9 +1,20 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const Anthropic = require('@anthropic-ai/sdk');
+const {
+  initDb,
+  saveIncoming,
+  saveOutgoing,
+  updateStatus,
+  getChats,
+  getMessages,
+} = require('./db');
 
 const app = express();
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+initDb();
 
 const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const WA_TOKEN     = process.env.WA_TOKEN;
@@ -16,9 +27,9 @@ const NOTIFICAR_A = '59177626675'; // Tu WhatsApp personal
 // ── FOLLETOS (imágenes PNG) ───────────────────────────────────────────────
 const FOLLETOS = {
   clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
-  mh5_1:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
-  mh5_2:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
-  zaranda:      'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/zarandas-manuales.png',
+  mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
+  mh5_2:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
+  zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/zarandas-manuales.png',
 };
 
 // ── CATÁLOGO ──────────────────────────────────────────────────────────────
@@ -62,11 +73,34 @@ ${CATALOGO}`;
 
 const conversaciones = {};
 
+// ── HELPERS ───────────────────────────────────────────────────────────────
+function truncateConversation(from) {
+  if (!conversaciones[from]) return;
+  if (conversaciones[from].length > 20) {
+    conversaciones[from] = conversaciones[from].slice(-20);
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+    .replace(/\n/g, '<br>');
+}
+
+function extractMetaMessageId(result) {
+  return result?.messages?.[0]?.id || null;
+}
+
 // ── VERIFICACIÓN DEL WEBHOOK ──────────────────────────────────────────────
 app.get('/webhook', (req, res) => {
   const mode      = req.query['hub.mode'];
   const token     = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
+
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
     console.log('✅ Webhook verificado');
     res.status(200).send(challenge);
@@ -76,81 +110,354 @@ app.get('/webhook', (req, res) => {
   }
 });
 
+// ── BANDEJA SIMPLE ────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.redirect('/inbox');
+});
+
+app.get('/inbox', (req, res) => {
+  const chats = getChats();
+
+  let html = `
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Bandeja WhatsApp</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; max-width: 960px; margin: 20px auto; padding: 0 12px;">
+      <h1 style="margin-bottom: 8px;">Bandeja WhatsApp</h1>
+      <p style="color:#666; margin-top:0;">Conversaciones guardadas en Railway + SQLite</p>
+      <div style="border:1px solid #ddd; border-radius:10px; overflow:hidden;">
+  `;
+
+  if (!chats.length) {
+    html += `<div style="padding:16px;">Todavía no hay conversaciones guardadas.</div>`;
+  } else {
+    for (const chat of chats) {
+      const label = escapeHtml(chat.name || chat.wa_id);
+      const when = escapeHtml(chat.last_message_at || '');
+      html += `
+        <div style="padding:14px 16px; border-bottom:1px solid #eee;">
+          <a href="/chat/${encodeURIComponent(chat.wa_id)}" style="font-weight:bold; text-decoration:none; color:#111;">
+            ${label}
+          </a>
+          <div style="font-size:12px; color:#777; margin-top:4px;">${escapeHtml(chat.wa_id)}</div>
+          <div style="font-size:12px; color:#777; margin-top:4px;">${when}</div>
+        </div>
+      `;
+    }
+  }
+
+  html += `
+      </div>
+    </body>
+    </html>
+  `;
+
+  res.send(html);
+});
+
+app.get('/chat/:wa_id', (req, res) => {
+  const waId = req.params.wa_id;
+  const messages = getMessages(waId);
+
+  let html = `
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Chat ${escapeHtml(waId)}</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; max-width: 960px; margin: 20px auto; padding: 0 12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div>
+          <a href="/inbox" style="text-decoration:none;">← Volver</a>
+          <h1 style="margin:8px 0 0 0;">Chat con ${escapeHtml(waId)}</h1>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px; background:#fafafa; border:1px solid #ddd; border-radius:12px; padding:16px; min-height:300px;">
+  `;
+
+  if (!messages.length) {
+    html += `<div style="color:#666;">No hay mensajes guardados para este número.</div>`;
+  } else {
+    for (const msg of messages) {
+      const align = msg.direction === 'out' ? 'right' : 'left';
+      const bg = msg.direction === 'out' ? '#dcf8c6' : '#f1f1f1';
+      const status = msg.status ? ` (${escapeHtml(msg.status)})` : '';
+
+      html += `
+        <div style="text-align:${align};">
+          <div style="display:inline-block; max-width:72%; padding:10px 12px; border-radius:12px; background:${bg}; text-align:left;">
+            <div style="white-space:normal;">${escapeHtml(msg.text || '[sin texto]')}</div>
+            <div style="font-size:11px; color:#666; margin-top:6px;">${escapeHtml(msg.created_at)}${status}</div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  html += `
+      </div>
+
+      <form method="post" action="/reply/${encodeURIComponent(waId)}" style="margin-top:16px;">
+        <textarea name="text" rows="4" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px;" placeholder="Escribe una respuesta manual..."></textarea>
+        <button type="submit" style="margin-top:10px; padding:10px 14px; border:none; border-radius:8px; background:#25D366; color:#111; font-weight:bold; cursor:pointer;">
+          Enviar
+        </button>
+      </form>
+    </body>
+    </html>
+  `;
+
+  res.send(html);
+});
+
+app.post('/reply/:wa_id', async (req, res) => {
+  const waId = req.params.wa_id;
+  const text = (req.body.text || '').trim();
+
+  if (!text) {
+    return res.redirect(`/chat/${encodeURIComponent(waId)}`);
+  }
+
+  try {
+    const result = await enviarMensaje(waId, text);
+    const metaMessageId = extractMetaMessageId(result);
+
+    saveOutgoing({
+      waId,
+      text,
+      metaMessageId,
+      status: 'sent'
+    });
+
+    if (!conversaciones[waId]) conversaciones[waId] = [];
+    conversaciones[waId].push({ role: 'assistant', content: text });
+    truncateConversation(waId);
+
+    return res.redirect(`/chat/${encodeURIComponent(waId)}`);
+  } catch (err) {
+    console.error('❌ Error enviando respuesta manual:', err.message);
+    return res.status(500).send('Error enviando mensaje manual');
+  }
+});
+
 // ── RECEPCIÓN DE MENSAJES ─────────────────────────────────────────────────
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
+
   try {
-    const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!msg) return;
+    const entries = req.body.entry || [];
 
-    const from = msg.from;
+    for (const entry of entries) {
+      const changes = entry.changes || [];
 
-    // Audio
-    if (msg.type === 'audio') {
-      await enviarMensaje(from, 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊');
-      await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
-      return;
+      for (const change of changes) {
+        const value = change.value || {};
+        const contacts = value.contacts || [];
+        const messages = value.messages || [];
+        const statuses = value.statuses || [];
+        const contactName = contacts[0]?.profile?.name || null;
+
+        // Actualizar estados de mensajes salientes
+        for (const st of statuses) {
+          if (st?.id && st?.status) {
+            updateStatus(st.id, st.status);
+          }
+        }
+
+        // Procesar mensajes entrantes
+        for (const msg of messages) {
+          const from = msg.from;
+          const messageId = msg.id;
+
+          if (!from) continue;
+
+          // Audio
+          if (msg.type === 'audio') {
+            saveIncoming({
+              waId: from,
+              name: contactName,
+              text: '[Audio recibido]',
+              metaMessageId: messageId
+            });
+
+            const replyText = 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊';
+            const result = await enviarMensaje(from, replyText);
+
+            saveOutgoing({
+              waId: from,
+              text: replyText,
+              metaMessageId: extractMetaMessageId(result),
+              status: 'sent'
+            });
+
+            await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
+            continue;
+          }
+
+          // Otros tipos que no son texto
+          if (msg.type !== 'text') {
+            saveIncoming({
+              waId: from,
+              name: contactName,
+              text: `[Mensaje ${msg.type || 'no soportado'} recibido]`,
+              metaMessageId: messageId
+            });
+
+            const replyText = 'Solo puedo responder mensajes de texto por ahora. Escribime tu consulta 😊';
+            const result = await enviarMensaje(from, replyText);
+
+            saveOutgoing({
+              waId: from,
+              text: replyText,
+              metaMessageId: extractMetaMessageId(result),
+              status: 'sent'
+            });
+
+            continue;
+          }
+
+          const text = msg.text?.body || '';
+          console.log(`📩 Mensaje de ${from}: ${text}`);
+
+          saveIncoming({
+            waId: from,
+            name: contactName,
+            text,
+            metaMessageId: messageId
+          });
+
+          // Notificar mensaje entrante
+          await enviarMensaje(NOTIFICAR_A, `📩 Nuevo mensaje de +${from}:\n"${text}"`);
+
+          if (!conversaciones[from]) conversaciones[from] = [];
+          conversaciones[from].push({ role: 'user', content: text });
+          truncateConversation(from);
+
+          const respuesta = await ai.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 500,
+            system: SYSTEM_PROMPT,
+            messages: conversaciones[from]
+          });
+
+          let reply = respuesta.content?.[0]?.text || 'Perdón, no pude responder bien. Escribime de nuevo por favor.';
+          conversaciones[from].push({ role: 'assistant', content: reply });
+          truncateConversation(from);
+
+          // Ubicación
+          if (reply.includes('[ENVIAR_UBICACION]')) {
+            const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
+
+            if (texto) {
+              const resultTexto = await enviarMensaje(from, texto);
+              saveOutgoing({
+                waId: from,
+                text: texto,
+                metaMessageId: extractMetaMessageId(resultTexto),
+                status: 'sent'
+              });
+            }
+
+            const resultUbicacion = await enviarUbicacion(from);
+            saveOutgoing({
+              waId: from,
+              text: '[Ubicación enviada]',
+              metaMessageId: extractMetaMessageId(resultUbicacion),
+              status: 'sent'
+            });
+
+          // Folleto clasificadora
+          } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
+            const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
+
+            if (texto) {
+              const resultTexto = await enviarMensaje(from, texto);
+              saveOutgoing({
+                waId: from,
+                text: texto,
+                metaMessageId: extractMetaMessageId(resultTexto),
+                status: 'sent'
+              });
+            }
+
+            const resultImg = await enviarImagen(from, FOLLETOS.clasificadora);
+            saveOutgoing({
+              waId: from,
+              text: '[Imagen enviada: folleto clasificadora]',
+              metaMessageId: extractMetaMessageId(resultImg),
+              status: 'sent'
+            });
+
+          // Folleto MH5 (2 imágenes)
+          } else if (reply.includes('[FOLLETO_MH5]')) {
+            const texto = reply.replace('[FOLLETO_MH5]', '').trim();
+
+            if (texto) {
+              const resultTexto = await enviarMensaje(from, texto);
+              saveOutgoing({
+                waId: from,
+                text: texto,
+                metaMessageId: extractMetaMessageId(resultTexto),
+                status: 'sent'
+              });
+            }
+
+            const resultImg1 = await enviarImagen(from, FOLLETOS.mh5_1);
+            saveOutgoing({
+              waId: from,
+              text: '[Imagen enviada: MH5 1]',
+              metaMessageId: extractMetaMessageId(resultImg1),
+              status: 'sent'
+            });
+
+            const resultImg2 = await enviarImagen(from, FOLLETOS.mh5_2);
+            saveOutgoing({
+              waId: from,
+              text: '[Imagen enviada: MH5 2]',
+              metaMessageId: extractMetaMessageId(resultImg2),
+              status: 'sent'
+            });
+
+          // Folleto zaranda
+          } else if (reply.includes('[FOLLETO_ZARANDA]')) {
+            const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
+
+            if (texto) {
+              const resultTexto = await enviarMensaje(from, texto);
+              saveOutgoing({
+                waId: from,
+                text: texto,
+                metaMessageId: extractMetaMessageId(resultTexto),
+                status: 'sent'
+              });
+            }
+
+            const resultImg = await enviarImagen(from, FOLLETOS.zaranda);
+            saveOutgoing({
+              waId: from,
+              text: '[Imagen enviada: folleto zaranda]',
+              metaMessageId: extractMetaMessageId(resultImg),
+              status: 'sent'
+            });
+
+          // Respuesta normal
+          } else {
+            const resultTexto = await enviarMensaje(from, reply);
+            saveOutgoing({
+              waId: from,
+              text: reply,
+              metaMessageId: extractMetaMessageId(resultTexto),
+              status: 'sent'
+            });
+          }
+
+          console.log(`✅ Respuesta enviada a ${from}`);
+        }
+      }
     }
-
-    // Otros tipos que no son texto
-    if (msg.type !== 'text') {
-      await enviarMensaje(from, 'Solo puedo responder mensajes de texto por ahora. Escribime tu consulta 😊');
-      return;
-    }
-
-    const text = msg.text.body;
-    console.log(`📩 Mensaje de ${from}: ${text}`);
-
-    // Notificar mensaje entrante
-    await enviarMensaje(NOTIFICAR_A, `📩 Nuevo mensaje de +${from}:\n"${text}"`);
-
-    if (!conversaciones[from]) conversaciones[from] = [];
-    conversaciones[from].push({ role: 'user', content: text });
-    if (conversaciones[from].length > 20) {
-      conversaciones[from] = conversaciones[from].slice(-20);
-    }
-
-    const respuesta = await ai.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 500,
-      system: SYSTEM_PROMPT,
-      messages: conversaciones[from]
-    });
-
-    let reply = respuesta.content[0].text;
-    conversaciones[from].push({ role: 'assistant', content: reply });
-
-    // Ubicación
-    if (reply.includes('[ENVIAR_UBICACION]')) {
-      const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
-      if (texto) await enviarMensaje(from, texto);
-      await enviarUbicacion(from);
-
-    // Folleto clasificadora
-    } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
-      const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
-      if (texto) await enviarMensaje(from, texto);
-      await enviarImagen(from, FOLLETOS.clasificadora);
-
-    // Folleto MH5 (2 imágenes)
-    } else if (reply.includes('[FOLLETO_MH5]')) {
-      const texto = reply.replace('[FOLLETO_MH5]', '').trim();
-      if (texto) await enviarMensaje(from, texto);
-      await enviarImagen(from, FOLLETOS.mh5_1);
-      await enviarImagen(from, FOLLETOS.mh5_2);
-
-    // Folleto zaranda
-    } else if (reply.includes('[FOLLETO_ZARANDA]')) {
-      const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
-      if (texto) await enviarMensaje(from, texto);
-      await enviarImagen(from, FOLLETOS.zaranda);
-
-    // Respuesta normal
-    } else {
-      await enviarMensaje(from, reply);
-    }
-
-    console.log(`✅ Respuesta enviada a ${from}`);
 
   } catch (err) {
     console.error('❌ Error:', err.message);
@@ -161,21 +468,35 @@ app.post('/webhook', async (req, res) => {
 async function enviarMensaje(para, texto) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: {
+      'Authorization': `Bearer ${WA_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({
-      messaging_product: 'whatsapp', to: para, type: 'text', text: { body: texto }
+      messaging_product: 'whatsapp',
+      to: para,
+      type: 'text',
+      text: { body: texto }
     })
   });
-  if (!res.ok) throw new Error(JSON.stringify(await res.json()));
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(data));
+  return data;
 }
 
 // ── ENVIAR UBICACIÓN ──────────────────────────────────────────────────────
 async function enviarUbicacion(para) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: {
+      'Authorization': `Bearer ${WA_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({
-      messaging_product: 'whatsapp', to: para, type: 'location',
+      messaging_product: 'whatsapp',
+      to: para,
+      type: 'location',
       location: {
         latitude: -17.748285,
         longitude: -63.133169,
@@ -184,20 +505,31 @@ async function enviarUbicacion(para) {
       }
     })
   });
-  if (!res.ok) throw new Error(JSON.stringify(await res.json()));
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(data));
+  return data;
 }
 
 // ── ENVIAR IMAGEN ─────────────────────────────────────────────────────────
 async function enviarImagen(para, url) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: {
+      'Authorization': `Bearer ${WA_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({
-      messaging_product: 'whatsapp', to: para, type: 'image',
+      messaging_product: 'whatsapp',
+      to: para,
+      type: 'image',
       image: { link: url }
     })
   });
-  if (!res.ok) throw new Error(JSON.stringify(await res.json()));
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(data));
+  return data;
 }
 
 const PORT = process.env.PORT || 3000;
