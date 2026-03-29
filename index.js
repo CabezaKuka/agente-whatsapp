@@ -139,7 +139,7 @@ async function enviarUbicacion(para) {
       location: {
         latitude: -17.748285,
         longitude: -63.133169,
-        name: 'SIC',
+        name: 'SIC Servicio Industrial Cruceño',
         address: 'sexto anillo, parque industrial, Santa Cruz de la Sierra, Bolivia'
       }
     })
