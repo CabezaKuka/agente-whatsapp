@@ -44,6 +44,7 @@ Equipo: MOLINO 20 MARTILLOS | Precio: 4.750 Bolivianos | Descripción: 20 martil
 Equipo: MOLINO 20 MARTILLOS CON CICLÓN | Precio: 6.150 Bolivianos | Descripción: 20 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 80-100 kg harina, 400 kg con cedazo 3mm, 700 kg con 5mm, 800 kg con 12mm. Con ciega: 1000-2000 kg/hora. Motor requerido eléctrico trifásico 7.5HP o gasolina 11HP. No incluye motor. Incluye base de motor, extractor y ciclón.
 Equipo: MOLINO 24 MARTILLOS | Precio: 6.550 Bolivianos | Descripción: 24 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 150 kg harina, 600 kg con cedazo 3mm, 800 kg con 5mm, 1000 kg con 12mm. Con ciega: 2500 kg/hora. Motor requerido eléctrico trifásico 12.5HP o gasolina 13HP. No incluye motor. Incluye base de motor.
 Equipo: MOLINO 24 MARTILLOS CON CICLÓN | Precio: 7.900 Bolivianos | Descripción: 24 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 150 kg harina, 600 kg con cedazo 3mm, 800 kg con 5mm, 1200 kg con 12mm. Con ciega: 2500 kg/hora. Motor requerido eléctrico trifásico 12.5HP o gasolina 13HP. No incluye motor. Incluye base de motor, extractor y ciclón.
+Equipo: PICADORA DE PASTO Y CAÑA | Precio: 3500 Bolivianos| Descripción: Pica pasto y caña, dos tamaños de corte regulable. Rendimiento 2000 kilos hora. Motor requerido 3.5 hp, monofásico o trifásico o 6.5 HP a gasolina. Motor no incluido.
 `;
 
 const SYSTEM_PROMPT = `Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
