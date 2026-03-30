@@ -343,7 +343,8 @@ app.post('/webhook', async (req, res) => {
           truncateConversation(from);
 
           const respuesta = await ai.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-haiku-4-5-20251001',
+            //model: 'claude-sonnet-4-20250514',
             max_tokens: 500,
             system: SYSTEM_PROMPT,
             messages: conversaciones[from]
