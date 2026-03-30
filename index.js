@@ -333,7 +333,7 @@ app.post('/webhook', async (req, res) => {
           });
 
           // Notificar mensaje entrante
-          await enviarMensaje(NOTIFICAR_A, `📩 Nuevo mensaje de +${from}:\n"${text}"`);
+          //await enviarMensaje(NOTIFICAR_A, `📩 Nuevo mensaje de +${from}:\n"${text}"`);
 
           if (!conversaciones[from]) conversaciones[from] = [];
           conversaciones[from].push({ role: 'user', content: text });
