@@ -21,10 +21,8 @@ const WA_TOKEN     = process.env.WA_TOKEN;
 const WA_PHONE_ID  = process.env.WA_PHONE_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'miagente2024';
 
-// ── NÚMERO PARA NOTIFICACIONES ────────────────────────────────────────────
-const NOTIFICAR_A = '59177626675'; // Tu WhatsApp personal
+const NOTIFICAR_A = '59177626675';
 
-// ── FOLLETOS (imágenes PNG) ───────────────────────────────────────────────
 const FOLLETOS = {
   clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
   mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
@@ -32,7 +30,6 @@ const FOLLETOS = {
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista.png',
 };
 
-// ── CATÁLOGO ──────────────────────────────────────────────────────────────
 const CATALOGO = `
 Equipo: CLASIFICADORA DE GRANOS CG-3 | Precio: 3.900 dolares | STOCK: NO | Descripción: 3 zarandas intercambiables, motor 1.5HP, producción promedio 2500 kg/hora, alimentación monofásica 220V. Solo clasifica, no tiene aire para limpieza. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní, orégano.
 Equipo: CLASIFICADORA DE GRANOS CG-3E | Precio: $5.500 dolares | STOCK: NO |  Descripción: 3 zarandas intercambiables, motores 3.5HP (1.5HP cajón vibrador + 2HP aspirador), variador de velocidad electrónico, producción promedio 2500 kg/hora, alimentación monofásica 220V. Incluye ciclón para recepción de basura. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní.
@@ -82,9 +79,8 @@ const conversaciones = {};
 // ── HELPERS ───────────────────────────────────────────────────────────────
 function truncateConversation(from) {
   if (!conversaciones[from]) return;
-  if (conversaciones[from].length > 20) {
+  if (conversaciones[from].length > 20)
     conversaciones[from] = conversaciones[from].slice(-20);
-  }
 }
 
 function escapeHtml(value) {
@@ -101,12 +97,29 @@ function extractMetaMessageId(result) {
   return result?.messages?.[0]?.id || null;
 }
 
+// Convierte UTC ISO a GMT-4 y devuelve { fecha, hora }
+function toGMTMinus4(isoString) {
+  if (!isoString) return { fecha: '', hora: '' };
+  const d = new Date(isoString);
+  // Restar 4 horas
+  const local = new Date(d.getTime() - 4 * 60 * 60 * 1000);
+  const fecha = local.toISOString().slice(0, 10); // YYYY-MM-DD
+  const hora  = local.toISOString().slice(11, 16); // HH:MM
+  return { fecha, hora };
+}
+
+function fechaLegible(yyyy_mm_dd) {
+  const [y, m, d] = yyyy_mm_dd.split('-');
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  return `${parseInt(d)} de ${meses[parseInt(m)-1]} de ${y}`;
+}
+
 // ── VERIFICACIÓN DEL WEBHOOK ──────────────────────────────────────────────
 app.get('/webhook', (req, res) => {
   const mode      = req.query['hub.mode'];
   const token     = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
     console.log('✅ Webhook verificado');
     res.status(200).send(challenge);
@@ -116,132 +129,225 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// ── BANDEJA SIMPLE ────────────────────────────────────────────────────────
-app.get('/', (req, res) => {
-  res.redirect('/inbox');
-});
+// ── BANDEJA ───────────────────────────────────────────────────────────────
+app.get('/', (req, res) => res.redirect('/inbox'));
 
 app.get('/inbox', (req, res) => {
   const chats = getChats();
 
-  let html = `
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <title>Bandeja WhatsApp</title>
-    </head>
-    <body style="font-family: Arial, sans-serif; max-width: 960px; margin: 20px auto; padding: 0 12px;">
-      <h1 style="margin-bottom: 8px;">Bandeja WhatsApp</h1>
-      <p style="color:#666; margin-top:0;">Conversaciones guardadas en Railway + SQLite</p>
-      <div style="border:1px solid #ddd; border-radius:10px; overflow:hidden;">
-  `;
+  // Agrupar por día (GMT-4)
+  const grupos = {};
+  for (const chat of chats) {
+    const { fecha } = toGMTMinus4(chat.last_message_at);
+    if (!grupos[fecha]) grupos[fecha] = [];
+    grupos[fecha].push(chat);
+  }
+  const diasOrdenados = Object.keys(grupos).sort((a, b) => b.localeCompare(a));
 
-  if (!chats.length) {
-    html += `<div style="padding:16px;">Todavía no hay conversaciones guardadas.</div>`;
+  let html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Bandeja WhatsApp</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;background:#f0f2f5;min-height:100vh}
+    .header{background:#075e54;color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px}
+    .header h1{font-size:18px;font-weight:600}
+    .header small{font-size:12px;opacity:.75}
+    .container{max-width:700px;margin:20px auto;padding:0 12px}
+    .day-group{margin-bottom:16px;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+    .day-header{background:#fff;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;user-select:none}
+    .day-header:hover{background:#f9f9f9}
+    .day-title{font-weight:600;font-size:14px;color:#333}
+    .day-count{font-size:12px;color:#888}
+    .day-arrow{font-size:12px;color:#aaa;transition:transform .2s}
+    .day-arrow.open{transform:rotate(180deg)}
+    .day-body{background:#fff;display:none}
+    .day-body.open{display:block}
+    .chat-row{padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+    .chat-row:hover{background:#f5f5f5}
+    .avatar{width:42px;height:42px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px;flex-shrink:0}
+    .chat-info{flex:1;min-width:0}
+    .chat-name{font-weight:600;font-size:14px;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .chat-id{font-size:12px;color:#888}
+    .chat-time{font-size:11px;color:#aaa;white-space:nowrap}
+    .empty{text-align:center;padding:40px;color:#aaa;background:#fff;border-radius:10px}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>📋 Bandeja WhatsApp</h1>
+      <small>Agente SIC — hora GMT-4</small>
+    </div>
+  </div>
+  <div class="container">`;
+
+  if (!diasOrdenados.length) {
+    html += `<div class="empty">Todavía no hay conversaciones guardadas.</div>`;
   } else {
-    for (const chat of chats) {
-      const label = escapeHtml(chat.name || chat.wa_id);
-      const when = escapeHtml(chat.last_message_at || '');
+    for (const dia of diasOrdenados) {
+      const chatsDelDia = grupos[dia];
+      const esHoy = dia === toGMTMinus4(new Date().toISOString()).fecha;
+      const titulodia = esHoy ? `Hoy — ${fechaLegible(dia)}` : fechaLegible(dia);
+      const grupoId = `g_${dia.replace(/-/g, '')}`;
+
       html += `
-        <div style="padding:14px 16px; border-bottom:1px solid #eee;">
-          <a href="/chat/${encodeURIComponent(chat.wa_id)}" style="font-weight:bold; text-decoration:none; color:#111;">
-            ${label}
-          </a>
-          <div style="font-size:12px; color:#777; margin-top:4px;">${escapeHtml(chat.wa_id)}</div>
-          <div style="font-size:12px; color:#777; margin-top:4px;">${when}</div>
-        </div>
-      `;
+    <div class="day-group">
+      <div class="day-header" onclick="toggle('${grupoId}')">
+        <span class="day-title">${titulodia}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span class="day-count">${chatsDelDia.length} conversación${chatsDelDia.length !== 1 ? 'es' : ''}</span>
+          <span class="day-arrow${esHoy ? ' open' : ''}" id="arr_${grupoId}">▼</span>
+        </span>
+      </div>
+      <div class="day-body${esHoy ? ' open' : ''}" id="${grupoId}">`;
+
+      for (const chat of chatsDelDia) {
+        const nombre = chat.name || chat.wa_id;
+        const inicial = nombre.charAt(0).toUpperCase();
+        const { hora } = toGMTMinus4(chat.last_message_at);
+        html += `
+        <a class="chat-row" href="/chat/${encodeURIComponent(chat.wa_id)}">
+          <div class="avatar">${escapeHtml(inicial)}</div>
+          <div class="chat-info">
+            <div class="chat-name">${escapeHtml(nombre)}</div>
+            <div class="chat-id">+${escapeHtml(chat.wa_id)}</div>
+          </div>
+          <div class="chat-time">${escapeHtml(hora)}</div>
+        </a>`;
+      }
+
+      html += `
+      </div>
+    </div>`;
     }
   }
 
   html += `
-      </div>
-    </body>
-    </html>
-  `;
+  </div>
+  <script>
+    function toggle(id) {
+      const body = document.getElementById(id);
+      const arr  = document.getElementById('arr_' + id);
+      const open = body.classList.toggle('open');
+      arr.classList.toggle('open', open);
+    }
+  </script>
+</body>
+</html>`;
 
   res.send(html);
 });
 
+// ── CHAT INDIVIDUAL ───────────────────────────────────────────────────────
 app.get('/chat/:wa_id', (req, res) => {
   const waId = req.params.wa_id;
   const messages = getMessages(waId);
 
-  let html = `
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <title>Chat ${escapeHtml(waId)}</title>
-    </head>
-    <body style="font-family: Arial, sans-serif; max-width: 960px; margin: 20px auto; padding: 0 12px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <div>
-          <a href="/inbox" style="text-decoration:none;">← Volver</a>
-          <h1 style="margin:8px 0 0 0;">Chat con ${escapeHtml(waId)}</h1>
-        </div>
-      </div>
+  // Agrupar mensajes por día GMT-4
+  const grupos = {};
+  for (const msg of messages) {
+    const { fecha } = toGMTMinus4(msg.created_at);
+    if (!grupos[fecha]) grupos[fecha] = [];
+    grupos[fecha].push(msg);
+  }
+  const dias = Object.keys(grupos).sort();
 
-      <div style="display:flex; flex-direction:column; gap:10px; background:#fafafa; border:1px solid #ddd; border-radius:12px; padding:16px; min-height:300px;">
-  `;
+  let html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Chat ${escapeHtml(waId)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;background:#e5ddd5;min-height:100vh;display:flex;flex-direction:column}
+    .header{background:#075e54;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
+    .back{color:#fff;text-decoration:none;font-size:20px;line-height:1}
+    .avatar{width:38px;height:38px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0}
+    .header-info .name{font-weight:600;font-size:15px}
+    .header-info .num{font-size:12px;opacity:.8}
+    .messages{flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:4px;max-width:700px;margin:0 auto;width:100%}
+    .day-sep{text-align:center;margin:12px 0}
+    .day-sep span{background:#fff;border-radius:8px;padding:4px 12px;font-size:12px;color:#666;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+    .bubble-wrap{display:flex}
+    .bubble-wrap.out{justify-content:flex-end}
+    .bubble{max-width:72%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.5;word-wrap:break-word}
+    .bubble.in{background:#fff;border-radius:2px 12px 12px 12px}
+    .bubble.out{background:#dcf8c6;border-radius:12px 2px 12px 12px}
+    .bubble-time{font-size:11px;color:#999;margin-top:4px;text-align:right}
+    .reply-box{background:#fff;padding:12px 16px;border-top:1px solid #ddd;max-width:700px;margin:0 auto;width:100%}
+    .reply-box textarea{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;resize:none;font-size:14px;font-family:Arial,sans-serif}
+    .reply-box button{margin-top:8px;padding:10px 20px;border:none;border-radius:8px;background:#25D366;color:#111;font-weight:bold;cursor:pointer;font-size:14px}
+    .reply-box button:hover{background:#1ebe57}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <a class="back" href="/inbox">←</a>
+    <div class="avatar">${escapeHtml((waId).charAt(0))}</div>
+    <div class="header-info">
+      <div class="name">+${escapeHtml(waId)}</div>
+      <div class="num">WhatsApp</div>
+    </div>
+  </div>
 
-  if (!messages.length) {
-    html += `<div style="color:#666;">No hay mensajes guardados para este número.</div>`;
+  <div class="messages">`;
+
+  if (!dias.length) {
+    html += `<div style="text-align:center;color:#888;padding:40px">No hay mensajes guardados.</div>`;
   } else {
-    for (const msg of messages) {
-      const align = msg.direction === 'out' ? 'right' : 'left';
-      const bg = msg.direction === 'out' ? '#dcf8c6' : '#f1f1f1';
-      const status = msg.status ? ` (${escapeHtml(msg.status)})` : '';
-
+    for (const dia of dias) {
       html += `
-        <div style="text-align:${align};">
-          <div style="display:inline-block; max-width:72%; padding:10px 12px; border-radius:12px; background:${bg}; text-align:left;">
-            <div style="white-space:normal;">${escapeHtml(msg.text || '[sin texto]')}</div>
-            <div style="font-size:11px; color:#666; margin-top:6px;">${escapeHtml(msg.created_at)}${status}</div>
-          </div>
-        </div>
-      `;
+    <div class="day-sep"><span>${fechaLegible(dia)}</span></div>`;
+
+      for (const msg of grupos[dia]) {
+        const dir = msg.direction === 'out' ? 'out' : 'in';
+        const { hora } = toGMTMinus4(msg.created_at);
+        const status = msg.status && dir === 'out' ? ` · ${escapeHtml(msg.status)}` : '';
+        html += `
+    <div class="bubble-wrap ${dir}">
+      <div class="bubble ${dir}">
+        <div>${escapeHtml(msg.text || '[sin texto]')}</div>
+        <div class="bubble-time">${hora}${status}</div>
+      </div>
+    </div>`;
+      }
     }
   }
 
   html += `
-      </div>
+  </div>
 
-      <form method="post" action="/reply/${encodeURIComponent(waId)}" style="margin-top:16px;">
-        <textarea name="text" rows="4" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px;" placeholder="Escribe una respuesta manual..."></textarea>
-        <button type="submit" style="margin-top:10px; padding:10px 14px; border:none; border-radius:8px; background:#25D366; color:#111; font-weight:bold; cursor:pointer;">
-          Enviar
-        </button>
-      </form>
-    </body>
-    </html>
-  `;
+  <div class="reply-box">
+    <form method="post" action="/reply/${encodeURIComponent(waId)}">
+      <textarea name="text" rows="3" placeholder="Escribí una respuesta manual..."></textarea>
+      <button type="submit">Enviar</button>
+    </form>
+  </div>
+
+  <script>window.scrollTo(0, document.body.scrollHeight);</script>
+</body>
+</html>`;
 
   res.send(html);
 });
 
+// ── REPLY MANUAL ──────────────────────────────────────────────────────────
 app.post('/reply/:wa_id', async (req, res) => {
   const waId = req.params.wa_id;
   const text = (req.body.text || '').trim();
-
-  if (!text) {
-    return res.redirect(`/chat/${encodeURIComponent(waId)}`);
-  }
-
+  if (!text) return res.redirect(`/chat/${encodeURIComponent(waId)}`);
   try {
     const result = await enviarMensaje(waId, text);
     const metaMessageId = extractMetaMessageId(result);
-
-    saveOutgoing({
-      waId,
-      text,
-      metaMessageId,
-      status: 'sent'
-    });
-
+    saveOutgoing({ waId, text, metaMessageId, status: 'sent' });
     if (!conversaciones[waId]) conversaciones[waId] = [];
     conversaciones[waId].push({ role: 'assistant', content: text });
     truncateConversation(waId);
-
     return res.redirect(`/chat/${encodeURIComponent(waId)}`);
   } catch (err) {
     console.error('❌ Error enviando respuesta manual:', err.message);
@@ -249,94 +355,48 @@ app.post('/reply/:wa_id', async (req, res) => {
   }
 });
 
-// ── RECEPCIÓN DE MENSAJES ─────────────────────────────────────────────────
+// ── WEBHOOK ───────────────────────────────────────────────────────────────
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
-
   try {
     const entries = req.body.entry || [];
-
     for (const entry of entries) {
-      const changes = entry.changes || [];
-
-      for (const change of changes) {
+      for (const change of (entry.changes || [])) {
         const value = change.value || {};
         const contacts = value.contacts || [];
         const messages = value.messages || [];
         const statuses = value.statuses || [];
         const contactName = contacts[0]?.profile?.name || null;
 
-        // Actualizar estados de mensajes salientes
         for (const st of statuses) {
-          if (st?.id && st?.status) {
-            updateStatus(st.id, st.status);
-          }
+          if (st?.id && st?.status) updateStatus(st.id, st.status);
         }
 
-        // Procesar mensajes entrantes
         for (const msg of messages) {
           const from = msg.from;
           const messageId = msg.id;
-
           if (!from) continue;
 
-          // Audio
           if (msg.type === 'audio') {
-            saveIncoming({
-              waId: from,
-              name: contactName,
-              text: '[Audio recibido]',
-              metaMessageId: messageId
-            });
-
+            saveIncoming({ waId: from, name: contactName, text: '[Audio recibido]', metaMessageId: messageId });
             const replyText = 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊';
             const result = await enviarMensaje(from, replyText);
-
-            saveOutgoing({
-              waId: from,
-              text: replyText,
-              metaMessageId: extractMetaMessageId(result),
-              status: 'sent'
-            });
-
+            saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
             await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
             continue;
           }
 
-          // Otros tipos que no son texto
           if (msg.type !== 'text') {
-            saveIncoming({
-              waId: from,
-              name: contactName,
-              text: `[Mensaje ${msg.type || 'no soportado'} recibido]`,
-              metaMessageId: messageId
-            });
-
+            saveIncoming({ waId: from, name: contactName, text: `[Mensaje ${msg.type || 'no soportado'} recibido]`, metaMessageId: messageId });
             const replyText = 'Solo puedo responder mensajes de texto por ahora. Escribime tu consulta 😊';
             const result = await enviarMensaje(from, replyText);
-
-            saveOutgoing({
-              waId: from,
-              text: replyText,
-              metaMessageId: extractMetaMessageId(result),
-              status: 'sent'
-            });
-
+            saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
             continue;
           }
 
           const text = msg.text?.body || '';
           console.log(`📩 Mensaje de ${from}: ${text}`);
-
-          saveIncoming({
-            waId: from,
-            name: contactName,
-            text,
-            metaMessageId: messageId
-          });
-
-          // Notificar mensaje entrante
-          //await enviarMensaje(NOTIFICAR_A, `📩 Nuevo mensaje de +${from}:\n"${text}"`);
+          saveIncoming({ waId: from, name: contactName, text, metaMessageId: messageId });
 
           if (!conversaciones[from]) conversaciones[from] = [];
           conversaciones[from].push({ role: 'user', content: text });
@@ -344,7 +404,6 @@ app.post('/webhook', async (req, res) => {
 
           const respuesta = await ai.messages.create({
             model: 'claude-haiku-4-5-20251001',
-            //model: 'claude-sonnet-4-20250514',
             max_tokens: 500,
             system: SYSTEM_PROMPT,
             messages: conversaciones[from]
@@ -354,118 +413,44 @@ app.post('/webhook', async (req, res) => {
           conversaciones[from].push({ role: 'assistant', content: reply });
           truncateConversation(from);
 
-          // Ubicación
           if (reply.includes('[ENVIAR_UBICACION]')) {
             const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
-
             if (texto) {
-              const resultTexto = await enviarMensaje(from, texto);
-              saveOutgoing({
-                waId: from,
-                text: texto,
-                metaMessageId: extractMetaMessageId(resultTexto),
-                status: 'sent'
-              });
+              const r = await enviarMensaje(from, texto);
+              saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' });
             }
+            const r2 = await enviarUbicacion(from);
+            saveOutgoing({ waId: from, text: '[Ubicación enviada]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
 
-            const resultUbicacion = await enviarUbicacion(from);
-            saveOutgoing({
-              waId: from,
-              text: '[Ubicación enviada]',
-              metaMessageId: extractMetaMessageId(resultUbicacion),
-              status: 'sent'
-            });
-
-          // Folleto clasificadora
           } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
             const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
+            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+            const r2 = await enviarImagen(from, FOLLETOS.clasificadora);
+            saveOutgoing({ waId: from, text: '[Imagen: folleto clasificadora]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
 
-            if (texto) {
-              const resultTexto = await enviarMensaje(from, texto);
-              saveOutgoing({
-                waId: from,
-                text: texto,
-                metaMessageId: extractMetaMessageId(resultTexto),
-                status: 'sent'
-              });
-            }
-
-            const resultImg = await enviarImagen(from, FOLLETOS.clasificadora);
-            saveOutgoing({
-              waId: from,
-              text: '[Imagen enviada: folleto clasificadora]',
-              metaMessageId: extractMetaMessageId(resultImg),
-              status: 'sent'
-            });
-
-          // Folleto MH5 (2 imágenes)
           } else if (reply.includes('[FOLLETO_MH5]')) {
             const texto = reply.replace('[FOLLETO_MH5]', '').trim();
+            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+            const r1 = await enviarImagen(from, FOLLETOS.mh5_1);
+            saveOutgoing({ waId: from, text: '[Imagen: MH5 1]', metaMessageId: extractMetaMessageId(r1), status: 'sent' });
+            const r2 = await enviarImagen(from, FOLLETOS.mh5_2);
+            saveOutgoing({ waId: from, text: '[Imagen: MH5 2]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
 
-            if (texto) {
-              const resultTexto = await enviarMensaje(from, texto);
-              saveOutgoing({
-                waId: from,
-                text: texto,
-                metaMessageId: extractMetaMessageId(resultTexto),
-                status: 'sent'
-              });
-            }
-
-            const resultImg1 = await enviarImagen(from, FOLLETOS.mh5_1);
-            saveOutgoing({
-              waId: from,
-              text: '[Imagen enviada: MH5 1]',
-              metaMessageId: extractMetaMessageId(resultImg1),
-              status: 'sent'
-            });
-
-            const resultImg2 = await enviarImagen(from, FOLLETOS.mh5_2);
-            saveOutgoing({
-              waId: from,
-              text: '[Imagen enviada: MH5 2]',
-              metaMessageId: extractMetaMessageId(resultImg2),
-              status: 'sent'
-            });
-
-          // Folleto zaranda
           } else if (reply.includes('[FOLLETO_ZARANDA]')) {
             const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
+            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+            const r2 = await enviarImagen(from, FOLLETOS.zaranda);
+            saveOutgoing({ waId: from, text: '[Imagen: folleto zaranda]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
 
-            if (texto) {
-              const resultTexto = await enviarMensaje(from, texto);
-              saveOutgoing({
-                waId: from,
-                text: texto,
-                metaMessageId: extractMetaMessageId(resultTexto),
-                status: 'sent'
-              });
-            }
-
-            const resultImg = await enviarImagen(from, FOLLETOS.zaranda);
-            saveOutgoing({
-              waId: from,
-              text: '[Imagen enviada: folleto zaranda]',
-              metaMessageId: extractMetaMessageId(resultImg),
-              status: 'sent'
-            });
-
-          // Respuesta normal
           } else {
-            const resultTexto = await enviarMensaje(from, reply);
-            saveOutgoing({
-              waId: from,
-              text: reply,
-              metaMessageId: extractMetaMessageId(resultTexto),
-              status: 'sent'
-            });
+            const r = await enviarMensaje(from, reply);
+            saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
           }
 
           console.log(`✅ Respuesta enviada a ${from}`);
         }
       }
     }
-
   } catch (err) {
     console.error('❌ Error:', err.message);
   }
@@ -475,18 +460,9 @@ app.post('/webhook', async (req, res) => {
 async function enviarMensaje(para, texto) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${WA_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: para,
-      type: 'text',
-      text: { body: texto }
-    })
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: 'text', text: { body: texto } })
   });
-
   const data = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(data));
   return data;
@@ -496,23 +472,12 @@ async function enviarMensaje(para, texto) {
 async function enviarUbicacion(para) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${WA_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: para,
-      type: 'location',
-      location: {
-        latitude: -17.748285,
-        longitude: -63.133169,
-        name: 'Servicio Industrial Cruceño - SIC',
-        address: 'sexto anillo, parque industrial, Santa Cruz de la Sierra, Bolivia'
-      }
+      messaging_product: 'whatsapp', to: para, type: 'location',
+      location: { latitude: -17.748285, longitude: -63.133169, name: 'Servicio Industrial Cruceño - SIC', address: 'sexto anillo, parque industrial, Santa Cruz de la Sierra, Bolivia' }
     })
   });
-
   const data = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(data));
   return data;
@@ -522,18 +487,9 @@ async function enviarUbicacion(para) {
 async function enviarImagen(para, url) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${WA_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: para,
-      type: 'image',
-      image: { link: url }
-    })
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: 'image', image: { link: url } })
   });
-
   const data = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(data));
   return data;
