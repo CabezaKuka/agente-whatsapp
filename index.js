@@ -8,6 +8,11 @@ const {
   updateStatus,
   getChats,
   getMessages,
+  getCatalogo,
+  getCatalogoTexto,
+  updateProducto,
+  insertProducto,
+  deleteProducto,
 } = require('./db');
 
 const app = express();
@@ -30,21 +35,8 @@ const FOLLETOS = {
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista.png',
 };
 
-const CATALOGO = `
-Equipo: CLASIFICADORA DE GRANOS CG-3 | Precio: 3.900 dolares | STOCK: NO | Descripción: 3 zarandas intercambiables, motor 1.5HP, producción promedio 2500 kg/hora, alimentación monofásica 220V. Solo clasifica, no tiene aire para limpieza. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní, orégano.
-Equipo: CLASIFICADORA DE GRANOS CG-3E | Precio: $5.500 dolares | STOCK: NO |  Descripción: 3 zarandas intercambiables, motores 3.5HP (1.5HP cajón vibrador + 2HP aspirador), variador de velocidad electrónico, producción promedio 2500 kg/hora, alimentación monofásica 220V. Incluye ciclón para recepción de basura. Puede procesar soya, frejol, maíz, sorgo, quinua, chía, pasto, habas, maní.
-Equipo: ZARANDAS MANUALES | Precio: 230 Bolivianos | STOCK: SI | Descripción: Para laboratorio y muestras. Variedad de perforaciones redondas y oblongas. Dimensiones 30x25 cm. Son apilables.
-Equipo: MH-5 MEDIDOR DE HUMEDAD | Precio: 2.200 Bolivianos | STOCK: NO | Descripción: Para granos: soya, maíz, sorgo, girasol y otros. Precisión +-0.6%. Batería recargable, pantalla OLED, tapa de presión con aviso sonoro. Incluye estuche. No mide castaña, cacao ni café.
-Equipo: CUARTEADOR 12CM | Precio: 3.500 Bolivianos | STOCK: SI | Descripción: 12 canales de 19mm, fabricado en acero inoxidable, tres bandejas de recepción. No apto para áridos.
-Equipo: TRILLADORA ENSAYOS | Precio: 2.400 dolares | STOCK: SI | Descripción: Para maíz, sorgo, soya, trigo. Motor estacionario 6.5HP o eléctrico. Cóncavo regulable, tapa regulable, ventilador incorporado, montada sobre ruedas. Ideal para pequeñas parcelas o líneas de muestras.
-Equipo: MOLINO 20 MARTILLOS | Precio: 4.750 Bolivianos | STOCK: SI | Descripción: 20 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 80-100 kg harina, 400 kg con cedazo 3mm, 700 kg con 5mm, 800 kg con 12mm. Con ciega: 1000-2000 kg/hora. Motor requerido eléctrico 5HP en alta o gasolina 9HP. No incluye motor. Incluye base de motor.
-Equipo: MOLINO 20 MARTILLOS CON CICLÓN | Precio: 6.150 Bolivianos | STOCK: SI | Descripción: 20 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 80-100 kg harina, 400 kg con cedazo 3mm, 700 kg con 5mm, 800 kg con 12mm. Con ciega: 1000-2000 kg/hora. Motor requerido eléctrico trifásico 7.5HP en alta o gasolina 11HP. No incluye motor. Incluye base de motor, extractor y ciclón.
-Equipo: MOLINO 24 MARTILLOS | Precio: 6.550 Bolivianos | STOCK: SI | Descripción: 24 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 150 kg harina, 600 kg con cedazo 3mm, 800 kg con 5mm, 1000 kg con 12mm. Con ciega: 2500 kg/hora. Motor requerido eléctrico trifásico 12.5HP en alta o gasolina 13HP. No incluye motor. Incluye base de motor.
-Equipo: MOLINO 24 MARTILLOS CON CICLÓN | Precio: 7.900 Bolivianos | STOCK: SI | Descripción: 24 martillos y 2 cuchillas, pica pasto, caña y muele granos. Rendimiento: 150 kg harina, 600 kg con cedazo 3mm, 800 kg con 5mm, 1200 kg con 12mm. Con ciega: 2500 kg/hora. Motor requerido eléctrico trifásico 12.5HP en alta o gasolina 13HP. No incluye motor. Incluye base de motor, extractor y ciclón.
-Equipo: PICADORA DE PASTO Y CAÑA | Precio: 3500 Bolivianos| STOCK: SI | Descripción: Pica pasto y caña, dos tamaños de corte regulable. Rendimiento 2000 kilos hora. Motor requerido 3.5 hp, monofásico o trifásico en alta o 6.5 HP a gasolina. Motor no incluido.
-`;
-
-const SYSTEM_PROMPT = `Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
+function buildSystemPrompt() {
+  return `Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
 Respondés como una persona real, nunca te identificás como bot ni asistente virtual.
 Mensajes MUY cortos — máximo 2 líneas, sin excepción.
 NUNCA usás guiones, viñetas ni listas. Todo en texto corrido.
@@ -72,7 +64,8 @@ FOLLETOS DISPONIBLES — cuando el cliente pida más info, folleto, ficha técni
 Ejemplo: "Te mando la ficha 👇 [FOLLETO_CLASIFICADORA]"
 
 CATÁLOGO DE EQUIPOS:
-${CATALOGO}`;
+${getCatalogoTexto()}`;
+}
 
 const conversaciones = {};
 
@@ -93,18 +86,20 @@ function escapeHtml(value) {
     .replace(/\n/g, '<br>');
 }
 
+function escapeAttr(value) {
+  return String(value ?? '').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
 function extractMetaMessageId(result) {
   return result?.messages?.[0]?.id || null;
 }
 
-// Convierte UTC ISO a GMT-4 y devuelve { fecha, hora }
 function toGMTMinus4(isoString) {
   if (!isoString) return { fecha: '', hora: '' };
   const d = new Date(isoString);
-  // Restar 4 horas
   const local = new Date(d.getTime() - 4 * 60 * 60 * 1000);
-  const fecha = local.toISOString().slice(0, 10); // YYYY-MM-DD
-  const hora  = local.toISOString().slice(11, 16); // HH:MM
+  const fecha = local.toISOString().slice(0, 10);
+  const hora  = local.toISOString().slice(11, 16);
   return { fecha, hora };
 }
 
@@ -134,8 +129,6 @@ app.get('/', (req, res) => res.redirect('/inbox'));
 
 app.get('/inbox', (req, res) => {
   const chats = getChats();
-
-  // Agrupar por día (GMT-4)
   const grupos = {};
   for (const chat of chats) {
     const { fecha } = toGMTMinus4(chat.last_message_at);
@@ -145,17 +138,18 @@ app.get('/inbox', (req, res) => {
   const diasOrdenados = Object.keys(grupos).sort((a, b) => b.localeCompare(a));
 
   let html = `<!DOCTYPE html>
-<html>
-<head>
+<html><head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Bandeja WhatsApp</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Arial,sans-serif;background:#f0f2f5;min-height:100vh}
-    .header{background:#075e54;color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px}
+    .header{background:#075e54;color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between}
     .header h1{font-size:18px;font-weight:600}
-    .header small{font-size:12px;opacity:.75}
+    .header small{font-size:12px;opacity:.75;display:block}
+    .header a{color:#fff;text-decoration:none;background:rgba(255,255,255,.2);padding:7px 14px;border-radius:6px;font-size:13px;font-weight:600}
+    .header a:hover{background:rgba(255,255,255,.3)}
     .container{max-width:700px;margin:20px auto;padding:0 12px}
     .day-group{margin-bottom:16px;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.12)}
     .day-header{background:#fff;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;user-select:none}
@@ -182,6 +176,7 @@ app.get('/inbox', (req, res) => {
       <h1>📋 Bandeja WhatsApp</h1>
       <small>Agente SIC — hora GMT-4</small>
     </div>
+    <a href="/admin">⚙️ Catálogo</a>
   </div>
   <div class="container">`;
 
@@ -193,7 +188,6 @@ app.get('/inbox', (req, res) => {
       const esHoy = dia === toGMTMinus4(new Date().toISOString()).fecha;
       const titulodia = esHoy ? `Hoy — ${fechaLegible(dia)}` : fechaLegible(dia);
       const grupoId = `g_${dia.replace(/-/g, '')}`;
-
       html += `
     <div class="day-group">
       <div class="day-header" onclick="toggle('${grupoId}')">
@@ -204,7 +198,6 @@ app.get('/inbox', (req, res) => {
         </span>
       </div>
       <div class="day-body${esHoy ? ' open' : ''}" id="${grupoId}">`;
-
       for (const chat of chatsDelDia) {
         const nombre = chat.name || chat.wa_id;
         const inicial = nombre.charAt(0).toUpperCase();
@@ -219,10 +212,7 @@ app.get('/inbox', (req, res) => {
           <div class="chat-time">${escapeHtml(hora)}</div>
         </a>`;
       }
-
-      html += `
-      </div>
-    </div>`;
+      html += `</div></div>`;
     }
   }
 
@@ -236,9 +226,7 @@ app.get('/inbox', (req, res) => {
       arr.classList.toggle('open', open);
     }
   </script>
-</body>
-</html>`;
-
+</body></html>`;
   res.send(html);
 });
 
@@ -246,8 +234,6 @@ app.get('/inbox', (req, res) => {
 app.get('/chat/:wa_id', (req, res) => {
   const waId = req.params.wa_id;
   const messages = getMessages(waId);
-
-  // Agrupar mensajes por día GMT-4
   const grupos = {};
   for (const msg of messages) {
     const { fecha } = toGMTMinus4(msg.created_at);
@@ -257,8 +243,7 @@ app.get('/chat/:wa_id', (req, res) => {
   const dias = Object.keys(grupos).sort();
 
   let html = `<!DOCTYPE html>
-<html>
-<head>
+<html><head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Chat ${escapeHtml(waId)}</title>
@@ -294,16 +279,13 @@ app.get('/chat/:wa_id', (req, res) => {
       <div class="num">WhatsApp</div>
     </div>
   </div>
-
   <div class="messages">`;
 
   if (!dias.length) {
     html += `<div style="text-align:center;color:#888;padding:40px">No hay mensajes guardados.</div>`;
   } else {
     for (const dia of dias) {
-      html += `
-    <div class="day-sep"><span>${fechaLegible(dia)}</span></div>`;
-
+      html += `<div class="day-sep"><span>${fechaLegible(dia)}</span></div>`;
       for (const msg of grupos[dia]) {
         const dir = msg.direction === 'out' ? 'out' : 'in';
         const { hora } = toGMTMinus4(msg.created_at);
@@ -321,18 +303,14 @@ app.get('/chat/:wa_id', (req, res) => {
 
   html += `
   </div>
-
   <div class="reply-box">
     <form method="post" action="/reply/${encodeURIComponent(waId)}">
       <textarea name="text" rows="3" placeholder="Escribí una respuesta manual..."></textarea>
       <button type="submit">Enviar</button>
     </form>
   </div>
-
   <script>window.scrollTo(0, document.body.scrollHeight);</script>
-</body>
-</html>`;
-
+</body></html>`;
   res.send(html);
 });
 
@@ -353,6 +331,197 @@ app.post('/reply/:wa_id', async (req, res) => {
     console.error('❌ Error enviando respuesta manual:', err.message);
     return res.status(500).send('Error enviando mensaje manual');
   }
+});
+
+// ── ADMIN CATÁLOGO ────────────────────────────────────────────────────────
+app.get('/admin', (req, res) => {
+  const items = getCatalogo();
+  const msg = req.query.msg || '';
+
+  let html = `<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Catálogo — Admin</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;background:#f0f2f5;min-height:100vh}
+    .header{background:#075e54;color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between}
+    .header h1{font-size:18px;font-weight:600}
+    .header a{color:#fff;text-decoration:none;background:rgba(255,255,255,.2);padding:7px 14px;border-radius:6px;font-size:13px}
+    .header a:hover{background:rgba(255,255,255,.3)}
+    .container{max-width:900px;margin:20px auto;padding:0 12px}
+    .alert{background:#d4edda;color:#155724;border:1px solid #c3e6cb;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px}
+    .card{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.12);margin-bottom:16px;overflow:hidden}
+    .card-header{background:#f8f9fa;padding:12px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+    .card-header h2{font-size:15px;color:#333}
+    .stock-si{color:#28a745;font-weight:700;font-size:12px;background:#d4edda;padding:2px 8px;border-radius:10px}
+    .stock-no{color:#dc3545;font-weight:700;font-size:12px;background:#f8d7da;padding:2px 8px;border-radius:10px}
+    .card-body{padding:16px}
+    .precio{font-size:18px;font-weight:700;color:#075e54;margin-bottom:8px}
+    .desc{font-size:13px;color:#555;line-height:1.5;margin-bottom:14px}
+    .btn-row{display:flex;gap:8px}
+    .btn{padding:7px 16px;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600}
+    .btn-edit{background:#075e54;color:#fff}
+    .btn-edit:hover{background:#064d45}
+    .btn-del{background:#dc3545;color:#fff}
+    .btn-del:hover{background:#c82333}
+    .new-card{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.12);padding:20px;margin-bottom:24px}
+    .new-card h2{font-size:15px;color:#333;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #eee}
+    .form-group{margin-bottom:14px}
+    .form-group label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:5px;text-transform:uppercase}
+    .form-group input,.form-group textarea,.form-group select{width:100%;padding:9px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:Arial,sans-serif}
+    .form-group textarea{resize:vertical;min-height:80px}
+    .form-group input:focus,.form-group textarea:focus,.form-group select:focus{outline:none;border-color:#075e54}
+    .btn-save{background:#075e54;color:#fff;padding:10px 24px;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;width:100%}
+    .btn-save:hover{background:#064d45}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center}
+    .modal-overlay.open{display:flex}
+    .modal{background:#fff;border-radius:12px;padding:24px;width:90%;max-width:560px;max-height:90vh;overflow-y:auto}
+    .modal h2{font-size:16px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #eee}
+    .modal-btns{display:flex;gap:8px;margin-top:16px}
+    .btn-cancel{background:#eee;color:#333;padding:9px 20px;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚙️ Gestión de Catálogo</h1>
+    <a href="/inbox">← Bandeja</a>
+  </div>
+  <div class="container">`;
+
+  if (msg) html += `<div class="alert">✅ ${escapeHtml(msg)}</div>`;
+
+  // Formulario nuevo producto
+  html += `
+    <div class="new-card">
+      <h2>➕ Agregar nuevo equipo</h2>
+      <form method="post" action="/admin/nuevo">
+        <div class="form-group">
+          <label>Nombre del equipo</label>
+          <input type="text" name="nombre" required placeholder="Ej: MOLINO 30 MARTILLOS">
+        </div>
+        <div class="form-group">
+          <label>Precio</label>
+          <input type="text" name="precio" required placeholder="Ej: 5.000 Bolivianos">
+        </div>
+        <div class="form-group">
+          <label>Stock</label>
+          <select name="stock">
+            <option value="SI">SI — Disponible</option>
+            <option value="NO">NO — Fabricando</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea name="descripcion" required placeholder="Características, especificaciones, usos..."></textarea>
+        </div>
+        <button type="submit" class="btn-save">Guardar equipo</button>
+      </form>
+    </div>
+
+    <div class="new-card">
+      <h2>📦 Equipos actuales (${items.length})</h2>
+    </div>`;
+
+  // Lista de productos
+  for (const item of items) {
+    html += `
+    <div class="card">
+      <div class="card-header">
+        <h2>${escapeHtml(item.nombre)}</h2>
+        <span class="stock-${item.stock.toLowerCase()}">${escapeHtml(item.stock) === 'SI' ? '✓ En stock' : '✗ Fabricando'}</span>
+      </div>
+      <div class="card-body">
+        <div class="precio">${escapeHtml(item.precio)}</div>
+        <div class="desc">${escapeHtml(item.descripcion)}</div>
+        <div class="btn-row">
+          <button class="btn btn-edit" onclick="abrirEditor(${item.id}, '${escapeAttr(item.nombre)}', '${escapeAttr(item.precio)}', '${escapeAttr(item.stock)}', '${escapeAttr(item.descripcion)}')">✏️ Editar</button>
+          <form method="post" action="/admin/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar ${escapeAttr(item.nombre)}?')">
+            <input type="hidden" name="id" value="${item.id}">
+            <button type="submit" class="btn btn-del">🗑 Eliminar</button>
+          </form>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Modal de edición
+  html += `
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h2>✏️ Editar equipo</h2>
+      <form method="post" action="/admin/editar">
+        <input type="hidden" name="id" id="editId">
+        <div class="form-group">
+          <label>Nombre del equipo</label>
+          <input type="text" name="nombre" id="editNombre" required>
+        </div>
+        <div class="form-group">
+          <label>Precio</label>
+          <input type="text" name="precio" id="editPrecio" required>
+        </div>
+        <div class="form-group">
+          <label>Stock</label>
+          <select name="stock" id="editStock">
+            <option value="SI">SI — Disponible</option>
+            <option value="NO">NO — Fabricando</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea name="descripcion" id="editDesc" required></textarea>
+        </div>
+        <div class="modal-btns">
+          <button type="submit" class="btn-save" style="flex:1">Guardar cambios</button>
+          <button type="button" class="btn-cancel" onclick="cerrarEditor()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function abrirEditor(id, nombre, precio, stock, desc) {
+      document.getElementById('editId').value = id;
+      document.getElementById('editNombre').value = nombre;
+      document.getElementById('editPrecio').value = precio;
+      document.getElementById('editStock').value = stock;
+      document.getElementById('editDesc').value = desc;
+      document.getElementById('modalOverlay').classList.add('open');
+    }
+    function cerrarEditor() {
+      document.getElementById('modalOverlay').classList.remove('open');
+    }
+    document.getElementById('modalOverlay').addEventListener('click', function(e) {
+      if (e.target === this) cerrarEditor();
+    });
+  </script>
+</body></html>`;
+
+  res.send(html);
+});
+
+app.post('/admin/editar', (req, res) => {
+  const { id, nombre, precio, stock, descripcion } = req.body;
+  if (!id || !nombre || !precio || !descripcion) return res.redirect('/admin?msg=Error+faltan+datos');
+  updateProducto({ id, nombre: nombre.trim(), precio: precio.trim(), stock: stock || 'SI', descripcion: descripcion.trim() });
+  res.redirect('/admin?msg=Equipo+actualizado+correctamente');
+});
+
+app.post('/admin/nuevo', (req, res) => {
+  const { nombre, precio, stock, descripcion } = req.body;
+  if (!nombre || !precio || !descripcion) return res.redirect('/admin?msg=Error+faltan+datos');
+  insertProducto({ nombre: nombre.trim(), precio: precio.trim(), stock: stock || 'SI', descripcion: descripcion.trim() });
+  res.redirect('/admin?msg=Equipo+agregado+correctamente');
+});
+
+app.post('/admin/eliminar', (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.redirect('/admin');
+  deleteProducto(id);
+  res.redirect('/admin?msg=Equipo+eliminado');
 });
 
 // ── WEBHOOK ───────────────────────────────────────────────────────────────
@@ -402,10 +571,13 @@ app.post('/webhook', async (req, res) => {
           conversaciones[from].push({ role: 'user', content: text });
           truncateConversation(from);
 
+          // Construir prompt con catálogo actualizado desde DB
+          const systemPrompt = buildSystemPrompt();
+
           const respuesta = await ai.messages.create({
             model: 'claude-haiku-4-5-20251001',
             max_tokens: 500,
-            system: SYSTEM_PROMPT,
+            system: systemPrompt,
             messages: conversaciones[from]
           });
 
@@ -415,10 +587,7 @@ app.post('/webhook', async (req, res) => {
 
           if (reply.includes('[ENVIAR_UBICACION]')) {
             const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
-            if (texto) {
-              const r = await enviarMensaje(from, texto);
-              saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' });
-            }
+            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
             const r2 = await enviarUbicacion(from);
             saveOutgoing({ waId: from, text: '[Ubicación enviada]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
 
@@ -468,7 +637,6 @@ async function enviarMensaje(para, texto) {
   return data;
 }
 
-// ── ENVIAR UBICACIÓN ──────────────────────────────────────────────────────
 async function enviarUbicacion(para) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
@@ -483,7 +651,6 @@ async function enviarUbicacion(para) {
   return data;
 }
 
-// ── ENVIAR IMAGEN ─────────────────────────────────────────────────────────
 async function enviarImagen(para, url) {
   const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
     method: 'POST',
