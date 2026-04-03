@@ -59,7 +59,7 @@ INFORMACIÓN DEL NEGOCIO:
 - No tenemos fotos de las picadoras en este momento.
 - Los molinos son industria brasilera marca TRAPP.
 
-FOLLETOS-IMAGENES DISPONIBLES — solo estas 3 palabras clave existen, no inventés otras:
+FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
 - Clasificadora CG-3 o CG-3E: [FOLLETO_CLASIFICADORA]
 - Medidor de humedad MH-5: [FOLLETO_MH5]
 - Zarandas manuales: [FOLLETO_ZARANDA]
