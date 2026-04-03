@@ -614,7 +614,13 @@ app.post('/webhook', async (req, res) => {
             if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
             const r2 = await enviarImagen(from, FOLLETOS.zaranda);
             saveOutgoing({ waId: from, text: '[Imagen: folleto zaranda]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
+         
+          } else if (reply.includes('[FOLLETO_MOLINOS]')) {
+            const texto = reply.replace('[FOLLETO_MOLINOS]', '').trim();
+            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+            const r2 = await enviarImagen(from, FOLLETOS.molinos);
+            saveOutgoing({ waId: from, text: '[Imagen: folleto molinos]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+            
           } else {
             const r = await enviarMensaje(from, reply);
             saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
