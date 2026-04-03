@@ -33,6 +33,7 @@ const FOLLETOS = {
   mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
   mh5_2:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista2.png',
+  molinos:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/molinos.png',
 };
 
 function buildSystemPrompt() {
@@ -55,7 +56,7 @@ INFORMACIÓN DEL NEGOCIO:
 - Si el cliente pregunta por ubicación, dirección, dónde están, cómo llegar, dónde queda, o cualquier variante, respondé primero con un mensaje breve indicando cómo identificar el lugar y luego escribí [ENVIAR_UBICACION]. Ejemplo: "Te mando la ubicación, somos el galpón blanco 🏭 [ENVIAR_UBICACION]"
 - Si no hay stock, decí cordialmente que estamos fabricando y que para consultar tiempos de entrega escriban al 76317951. No ofrezcas contactarlos vos, el cliente es quien debe escribir.
 - Los molinos no incluyen motor.
-- No tenemos fotos de los molinos y picadoras en este momento.
+- No tenemos fotos de las picadoras en este momento.
 - Los molinos son industria brasilera marca TRAPP.
 
 FOLLETOS-IMAGENES DISPONIBLES — solo estas 3 palabras clave existen, no inventés otras:
