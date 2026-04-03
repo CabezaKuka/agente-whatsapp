@@ -63,6 +63,8 @@ FOLLETOS-IMAGENES DISPONIBLES — solo estas 3 palabras clave existen, no invent
 - Clasificadora CG-3 o CG-3E: [FOLLETO_CLASIFICADORA]
 - Medidor de humedad MH-5: [FOLLETO_MH5]
 - Zarandas manuales: [FOLLETO_ZARANDA]
+- Molinos: [FOLLETO_MOLINOS]
+
 Ejemplo: "Te mando la ficha 👇 [FOLLETO_CLASIFICADORA]"
 
 CATÁLOGO DE EQUIPOS:
