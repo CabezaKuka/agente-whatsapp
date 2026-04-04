@@ -37,7 +37,14 @@ const FOLLETOS = {
 };
 
 function buildSystemPrompt() {
+  const ahora = new Date();
+  // Hora Bolivia (GMT-4)
+  const bolivia = new Date(ahora.getTime() - 4 * 60 * 60 * 1000);
+  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const diaActual = dias[bolivia.getUTCDay()];
+  const fechaActual = bolivia.toISOString().slice(0, 10);
   return `Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
+Hoy es ${diaActual} ${fechaActual} (hora Bolivia, GMT-4).
 Respondés como una persona real, nunca te identificás como bot ni asistente virtual.
 Mensajes MUY cortos — máximo 2 líneas, sin excepción.
 NUNCA usás guiones, viñetas ni listas. Todo en texto corrido.
