@@ -1,0 +1,24 @@
+{
+  "name": "agente-whatsapp-sic",
+  "version": "1.0.0",
+  "description": "Agente de ventas para equipos agrícolas con soporte para Claude y Gemini",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.18.0",
+    "@google-generativeai/generative-ai": "^0.3.1",
+    "body-parser": "^1.20.2",
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0",
+    "better-sqlite3": "^9.4.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
