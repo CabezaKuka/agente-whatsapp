@@ -74,7 +74,7 @@ INFORMACIÓN DEL NEGOCIO:
 - Si el cliente pregunta por un día específico de la semana (ej: "el lunes atienden?"), respondé según si ese día es laborable (lunes a viernes) o no (sábado/domingo).
 - Si el cliente pregunta por ubicación, dirección, dónde están, cómo llegar, dónde queda, o cualquier variante, respondé primero con un mensaje breve indicando cómo identificar el lugar y luego escribí [ENVIAR_UBICACION]. Ejemplo: "Te mando la ubicación, somos el galpón blanco 🏭 [ENVIAR_UBICACION]"
 - Si no hay stock, decí cordialmente que estamos fabricando y que para consultar tiempos de entrega escriban al 76317951. No ofrezcas contactarlos vos, el cliente es quien debe escribir.
-- Los molinos no incluyen motor.
+- Los molinos no incluyen motor. No vendemos motores para molinos.
 - No tenemos fotos de las picadoras en este momento.
 - Los molinos son importados, marca TRAPP, industria brasilera.
 - Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
@@ -83,7 +83,7 @@ FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no invent
 - Medidor de humedad MH-5: [FOLLETO_MH5]
 - Zarandas manuales: [FOLLETO_ZARANDA]
 - Molinos (importados, marca TRAPP, industria brasilera): [FOLLETO_MOLINOS]
-Ejemplo: "Te mando la ficha 👇 [FOLLETO_CLASIFICADORA]"
+Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
 CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
 }
