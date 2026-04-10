@@ -77,6 +77,7 @@ INFORMACIÓN DEL NEGOCIO:
 - Los molinos no incluyen motor.
 - No tenemos fotos de las picadoras en este momento.
 - Los molinos son importados, marca TRAPP, industria brasilera.
+- Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
 FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
 - Clasificadora CG-3 o CG-3E: [FOLLETO_CLASIFICADORA]
 - Medidor de humedad MH-5: [FOLLETO_MH5]
