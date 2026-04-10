@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const { GoogleGenerativeAI } = require('@google-generativeai/generative-ai');
+const { GoogleGenerativeAI } = require('@google-generativeai');
 const {
   initDb,
   saveIncoming,
