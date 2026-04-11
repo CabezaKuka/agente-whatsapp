@@ -571,7 +571,7 @@ app.post('/webhook', async (req, res) => {
             const replyText = 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊';
             const result = await enviarMensaje(from, replyText);
             saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
-            await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
+            //await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
             continue;
           }
 
