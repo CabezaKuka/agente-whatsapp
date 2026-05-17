@@ -34,6 +34,7 @@ const FOLLETOS = {
   mh5_2:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista2.png',
   molinos:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/molinos.png',
+  nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS.png',
 };
 
 function buildSystemPrompt() {
@@ -78,11 +79,12 @@ INFORMACIÓN DEL NEGOCIO:
 - No tenemos fotos de las picadoras en este momento.
 - Los molinos son importados, marca TRAPP, industria brasilera.
 - Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
-FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
+FOLLETOS-IMAGENES DISPONIBLES — solo estas 5 palabras clave existen, no inventés otras:
 - Clasificadora CG-3 o CG-3E: [FOLLETO_CLASIFICADORA]
 - Medidor de humedad MH-5: [FOLLETO_MH5]
 - Zarandas manuales: [FOLLETO_ZARANDA]
 - Molinos (importados, marca TRAPP, industria brasilera): [FOLLETO_MOLINOS]
+- Nivel: [FOLLETO_NIVEL]
 Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
 CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
@@ -637,7 +639,13 @@ app.post('/webhook', async (req, res) => {
             const r2 = await enviarImagen(from, FOLLETOS.molinos);
             saveOutgoing({ waId: from, text: '[Imagen: folleto molinos]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
             
-          } else {
+          } else if (reply.includes('[FOLLETO_NIVEL]')) {
+            const texto = reply.replace('[FOLLETO_NIVEL]', '').trim();
+            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+            const r2 = await enviarImagen(from, FOLLETOS.nivel);
+            saveOutgoing({ waId: from, text: '[Imagen: folleto nivel]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+          } 
+          else {
             const r = await enviarMensaje(from, reply);
             saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
           }
