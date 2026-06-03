@@ -34,7 +34,7 @@ const FOLLETOS = {
   mh5_2:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista2.png',
   molinos:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/molinos.png',
-  nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS.png',
+  nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS1.png',
 };
 
 function buildSystemPrompt() {
