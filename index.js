@@ -49,8 +49,8 @@ function buildSystemPrompt() {
   const atiende = (d) => d >= 1 && d <= 5;
   const hoyAtiende = atiende(idx);
   const mananaAtiende = atiende((idx + 1) % 7);
-
-  return `Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
+//Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
+  return `Sos un vendedor respondiendo por WhatsApp. Vendés equipos agrícolas y el Nivel Digital para construcción y montaje.
 Hoy es ${diaActual} ${fechaActual} (hora Bolivia, GMT-4).
 Respondés como una persona real, nunca te identificás como bot ni asistente virtual.
 Mensajes MUY cortos — máximo 2 líneas, sin excepción.
