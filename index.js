@@ -35,6 +35,7 @@ const FOLLETOS = {
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista2.png',
   molinos:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/molinos.png',
   nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS1.png',
+  hiwifi:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaHiWIFI.png',
 };
 
 function buildSystemPrompt() {
@@ -50,7 +51,7 @@ function buildSystemPrompt() {
   const hoyAtiende = atiende(idx);
   const mananaAtiende = atiende((idx + 1) % 7);
 //Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
-  return `Sos un vendedor respondiendo por WhatsApp. Vendés equipos agrícolas y el Nivel Digital para construcción y montaje.
+  return `Sos un vendedor respondiendo por WhatsApp. Vendés equipos agrícolas y el  Digital para construcción y montaje.
 Hoy es ${diaActual} ${fechaActual} (hora Bolivia, GMT-4).
 Respondés como una persona real, nunca te identificás como bot ni asistente virtual.
 Mensajes MUY cortos — máximo 2 líneas, sin excepción.
@@ -87,6 +88,7 @@ FOLLETOS-IMAGENES DISPONIBLES — solo estas 5 palabras clave existen, no invent
 - Zarandas manuales: [FOLLETO_ZARANDA]
 - Molinos (importados, marca TRAPP, industria brasilera): [FOLLETO_MOLINOS]
 - Nivel: [FOLLETO_NIVEL]
+- HiWIFI: [FOLEETO_hiwifi]
 Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
 CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
@@ -646,7 +648,13 @@ app.post('/webhook', async (req, res) => {
             if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
             const r2 = await enviarImagen(from, FOLLETOS.nivel);
             saveOutgoing({ waId: from, text: '[Imagen: folleto nivel]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-          } 
+
+          } else if (reply.includes('[FOLLETO_hiwifi]')) {
+            const texto = reply.replace('[FOLLETO_hiwifi]', '').trim();
+            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+            const r2 = await enviarImagen(from, FOLLETOS.hiwifi);
+            saveOutgoing({ waId: from, text: '[Imagen: folleto hiwifi]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+          }   
           else {
             const r = await enviarMensaje(from, reply);
             saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
