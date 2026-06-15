@@ -88,7 +88,7 @@ FOLLETOS-IMAGENES DISPONIBLES — solo estas 5 palabras clave existen, no invent
 - Zarandas manuales: [FOLLETO_ZARANDA]
 - Molinos (importados, marca TRAPP, industria brasilera): [FOLLETO_MOLINOS]
 - Nivel: [FOLLETO_NIVEL]
-- HiWIFI: [FOLEETO_hiwifi]
+- HiWIFI: [FOLLETO_hiwifi]
 Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
 CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
