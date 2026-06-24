@@ -26,6 +26,13 @@ const WA_TOKEN     = process.env.WA_TOKEN;
 const WA_PHONE_ID  = process.env.WA_PHONE_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'miagente2024';
 
+// ── MODELO DE CLAUDE (seleccionable desde /admin) ──────────────────────────
+const MODELOS = {
+  haiku:  'claude-haiku-4-5-20251001',
+  sonnet: 'claude-sonnet-4-6',
+};
+let modeloActivo = 'haiku'; // valor por defecto al iniciar el servidor
+
 const NOTIFICAR_A = '59177626675';
 
 const FOLLETOS = {
@@ -33,7 +40,6 @@ const FOLLETOS = {
   mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
   mh5_2:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista2.png',
-  molinos:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/molinos.png',
   nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS1.png',
   hiwifi:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaHiWIFI.png',
 };
@@ -68,7 +74,6 @@ NUNCA inventés palabras clave — solo usás exactamente las definidas en FOLLE
 INFORMACIÓN DEL NEGOCIO:
 - Hacemos envíos a todo el país.
 - Fábrica propia en Santa Cruz de la Sierra — solo para clasificadoras, picadoras y zarandas.
-- Los molinos NO son fabricación propia. Son importados, marca TRAPP, industria brasilera. NUNCA digas que fabricamos molinos.
 - HORARIO: atendemos lunes a viernes de 7:00 a 11:00. Sábados, domingos y feriados no atendemos.
 - Hoy es ${diaActual}. Hoy ${hoyAtiende ? 'SÍ atendemos' : 'NO atendemos'}.
 - Mañana es ${diaManana}. Mañana ${mananaAtiende ? 'SÍ atendemos' : 'NO atendemos'}.
@@ -76,19 +81,16 @@ INFORMACIÓN DEL NEGOCIO:
 - Si el cliente pregunta por un día específico de la semana (ej: "el lunes atienden?"), respondé según si ese día es laborable (lunes a viernes) o no (sábado/domingo).
 - Si el cliente pregunta por ubicación, dirección, dónde están, cómo llegar, dónde queda, o cualquier variante, respondé primero con un mensaje breve indicando cómo identificar el lugar y luego escribí [ENVIAR_UBICACION]. Ejemplo: "Te mando la ubicación, somos el galpón blanco 🏭 [ENVIAR_UBICACION]"
 - Si no hay stock, decí cordialmente que estamos fabricando y que para consultar tiempos de entrega escriban al 76317951. No ofrezcas contactarlos vos, el cliente es quien debe escribir.
-- Los molinos no incluyen motor. No vendemos motores para molinos.
 - No tenemos fotos de las picadoras en este momento.
-- Los molinos son importados, marca TRAPP, industria brasilera.
 - Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
 - Si preguntan por humedad de granos o semillas contestas con el MH-5, si es para ambientes, depositos, almacenes, centros de datos contestas con HIWIFI.
 - Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, mandá el link público de un dispositivo real para que vean la app funcionando, ademas de la respuesta normal: "[HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)" Ejemplo: "Te paso un equipo real para que veas cómo se ve 👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)"
 NIVEL DIGITAL — comportamiento especial:
 Cuando pregunten por el nivel, dá precio y beneficio principal en una línea y cerrá con UNA pregunta para continuar la conversación (ej: "¿lo usarías en obra o en soldadura/montaje?"). NUNCA mandés la ficha técnica de entrada — solo si el cliente la pide expresamente o ya mostró interés concreto en comprar. Si objetan con "uso nivel de burbuja" o "lo hago a ojo", respondé con el costo de corregir un error (tiempo, material, mano de obra) sin mencionar features.
-FOLLETOS-IMAGENES DISPONIBLES — solo estas 5 palabras clave existen, no inventés otras:
+FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
 - Clasificadora CG-3 o CG-3E: [FOLLETO_CLASIFICADORA]
 - Medidor de humedad MH-5: [FOLLETO_MH5]
 - Zarandas manuales: [FOLLETO_ZARANDA]
-- Molinos (importados, marca TRAPP, industria brasilera): [FOLLETO_MOLINOS]
 - Nivel: [FOLLETO_NIVEL]
 - HiWIFI: [FOLLETO_hiwifi]
 Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
@@ -420,6 +422,22 @@ app.get('/admin', (req, res) => {
 
   if (msg) html += `<div class="alert">✅ ${escapeHtml(msg)}</div>`;
 
+  // Selector de modelo de Claude
+  html += `
+    <div class="new-card">
+      <h2>🤖 Modelo de Claude</h2>
+      <form method="post" action="/admin/modelo">
+        <div class="form-group">
+          <label>Modelo que responde en WhatsApp</label>
+          <select name="modelo">
+            <option value="haiku"${modeloActivo === 'haiku' ? ' selected' : ''}>Haiku — rápido y económico</option>
+            <option value="sonnet"${modeloActivo === 'sonnet' ? ' selected' : ''}>Sonnet — más preciso</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-save">Guardar modelo</button>
+      </form>
+    </div>`;
+
   // Formulario nuevo producto
   html += `
     <div class="new-card">
@@ -427,7 +445,7 @@ app.get('/admin', (req, res) => {
       <form method="post" action="/admin/nuevo">
         <div class="form-group">
           <label>Nombre del equipo</label>
-          <input type="text" name="nombre" required placeholder="Ej: MOLINO 30 MARTILLOS">
+          <input type="text" name="nombre" required placeholder="Ej: ZARANDA MANUAL CM-10">
         </div>
         <div class="form-group">
           <label>Precio</label>
@@ -531,6 +549,13 @@ app.get('/admin', (req, res) => {
   res.send(html);
 });
 
+app.post('/admin/modelo', (req, res) => {
+  const { modelo } = req.body;
+  if (!MODELOS[modelo]) return res.redirect('/admin?msg=Error+modelo+invalido');
+  modeloActivo = modelo;
+  res.redirect(`/admin?msg=Modelo+actualizado+a+${modelo.toUpperCase()}`);
+});
+
 app.post('/admin/editar', (req, res) => {
   const { id, nombre, precio, stock, descripcion } = req.body;
   if (!id || !nombre || !precio || !descripcion) return res.redirect('/admin?msg=Error+faltan+datos');
@@ -603,7 +628,7 @@ app.post('/webhook', async (req, res) => {
           const systemPrompt = buildSystemPrompt();
 
           const respuesta = await ai.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+            model: MODELOS[modeloActivo],
             max_tokens: 500,
             system: systemPrompt,
             messages: conversaciones[from]
@@ -639,12 +664,6 @@ app.post('/webhook', async (req, res) => {
             const r2 = await enviarImagen(from, FOLLETOS.zaranda);
             saveOutgoing({ waId: from, text: '[Imagen: folleto zaranda]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
          
-          } else if (reply.includes('[FOLLETO_MOLINOS]')) {
-            const texto = reply.replace('[FOLLETO_MOLINOS]', '').trim();
-            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-            const r2 = await enviarImagen(from, FOLLETOS.molinos);
-            saveOutgoing({ waId: from, text: '[Imagen: folleto molinos]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-            
           } else if (reply.includes('[FOLLETO_NIVEL]')) {
             const texto = reply.replace('[FOLLETO_NIVEL]', '').trim();
             if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
