@@ -109,6 +109,17 @@ function getMessages(waId) {
   `).all(waId);
 }
 
+// Todos los mensajes desde una fecha (ISO), con el nombre de contacto, para exportar
+function getMessagesDesde(sinceIso) {
+  return db.prepare(`
+    SELECT m.wa_id, c.name, m.direction, m.text, m.status, m.created_at
+    FROM messages m
+    LEFT JOIN contacts c ON c.wa_id = m.wa_id
+    WHERE m.created_at >= ?
+    ORDER BY m.wa_id ASC, m.created_at ASC
+  `).all(sinceIso);
+}
+
 // ── CATÁLOGO ──────────────────────────────────────────────────────────────
 function getCatalogo() {
   return db.prepare(`SELECT * FROM catalogo ORDER BY orden ASC`).all();
@@ -146,6 +157,7 @@ module.exports = {
   updateStatus,
   getChats,
   getMessages,
+  getMessagesDesde,
   getCatalogo,
   getCatalogoTexto,
   updateProducto,
