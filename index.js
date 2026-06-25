@@ -8,6 +8,7 @@ const {
   updateStatus,
   getChats,
   getMessages,
+  getMessagesDesde,
   getCatalogo,
   getCatalogoTexto,
   updateProducto,
@@ -41,7 +42,7 @@ const FOLLETOS = {
   mh5_2:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista2.png',
   nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS1.png',
-  hiwifi:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/hiWIFI-2026.png',
+  hiwifi:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaHiWIFI.png',
 };
 
 function buildSystemPrompt() {
@@ -84,7 +85,7 @@ INFORMACIÓN DEL NEGOCIO:
 - No tenemos fotos de las picadoras en este momento.
 - Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
 - Si preguntan por humedad de granos o semillas contestas con el MH-5, si es para ambientes, depositos, almacenes, centros de datos contestas con HIWIFI.
-- Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, siempre mandá el link público de un dispositivo real para que vean la app funcionando, ademas de la respuesta normal: "[HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)" Ejemplo: "Te paso un equipo real para que veas cómo se ve 👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)"
+- Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, mandá el link público de un dispositivo real para que vean la app funcionando, ademas de la respuesta normal: "[HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)" Ejemplo: "Te paso un equipo real para que veas cómo se ve 👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)"
 NIVEL DIGITAL — comportamiento especial:
 Cuando pregunten por el nivel, dá precio y beneficio principal en una línea y cerrá con UNA pregunta para continuar la conversación (ej: "¿lo usarías en obra o en soldadura/montaje?"). NUNCA mandés la ficha técnica de entrada — solo si el cliente la pide expresamente o ya mostró interés concreto en comprar. Si objetan con "uso nivel de burbuja" o "lo hago a ojo", respondé con el costo de corregir un error (tiempo, material, mano de obra) sin mencionar features.
 FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
@@ -198,6 +199,10 @@ app.get('/inbox', (req, res) => {
     .chat-id{font-size:12px;color:#888}
     .chat-time{font-size:11px;color:#aaa;white-space:nowrap}
     .empty{text-align:center;padding:40px;color:#aaa;background:#fff;border-radius:10px}
+    .export-form{display:flex;align-items:center;gap:6px}
+    .export-form select{border:none;border-radius:6px;padding:6px 8px;font-size:12px;background:rgba(255,255,255,.9);color:#075e54;font-weight:600}
+    .export-form button{border:none;background:rgba(255,255,255,.2);color:#fff;padding:7px 12px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+    .export-form button:hover{background:rgba(255,255,255,.3)}
   </style>
 </head>
 <body>
@@ -206,7 +211,18 @@ app.get('/inbox', (req, res) => {
       <h1>📋 Bandeja WhatsApp</h1>
       <small>Agente SIC — hora GMT-4</small>
     </div>
-    <a href="/admin">⚙️ Catálogo</a>
+    <div style="display:flex;align-items:center;gap:10px">
+      <form class="export-form" method="get" action="/admin/exportar">
+        <select name="dias">
+          <option value="1">Último día</option>
+          <option value="2">Últimos 2 días</option>
+          <option value="3" selected>Últimos 3 días</option>
+          <option value="7">Última semana</option>
+        </select>
+        <button type="submit">📥 Exportar</button>
+      </form>
+      <a href="/admin">⚙️ Catálogo</a>
+    </div>
   </div>
   <div class="container">`;
 
@@ -258,6 +274,61 @@ app.get('/inbox', (req, res) => {
   </script>
 </body></html>`;
   res.send(html);
+});
+
+// ── EXPORTAR CONVERSACIONES (para análisis) ───────────────────────────────
+app.get('/admin/exportar', (req, res) => {
+  let dias = parseInt(req.query.dias, 10);
+  if (!Number.isFinite(dias) || dias < 1) dias = 3;
+  if (dias > 30) dias = 30;
+
+  const sinceIso = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+  const filas = getMessagesDesde(sinceIso);
+
+  // Agrupar por wa_id, conservando el orden cronológico ya dado por la consulta
+  const porChat = {};
+  for (const fila of filas) {
+    if (!porChat[fila.wa_id]) porChat[fila.wa_id] = { nombre: fila.name, mensajes: [] };
+    if (fila.name) porChat[fila.wa_id].nombre = fila.name; // por si el nombre se actualizó
+    porChat[fila.wa_id].mensajes.push(fila);
+  }
+  const chatIds = Object.keys(porChat);
+
+  const ahoraBolivia = toGMTMinus4(new Date().toISOString());
+  const desdeBolivia  = toGMTMinus4(sinceIso);
+  const totalMensajes = filas.length;
+
+  let out = '';
+  out += `EXPORTACIÓN DE CONVERSACIONES — AGENTE WHATSAPP SIC\n`;
+  out += `Generado: ${ahoraBolivia.fecha} ${ahoraBolivia.hora} (hora Bolivia, GMT-4)\n`;
+  out += `Rango exportado: últimos ${dias} día${dias === 1 ? '' : 's'} (desde ${desdeBolivia.fecha} ${desdeBolivia.hora})\n`;
+  out += `Conversaciones: ${chatIds.length} | Mensajes totales: ${totalMensajes}\n`;
+  out += `${'='.repeat(64)}\n\n`;
+
+  if (!chatIds.length) {
+    out += '(No hay mensajes guardados en este período)\n';
+  }
+
+  for (const waId of chatIds) {
+    const chat = porChat[waId];
+    const nombre = chat.nombre || '(sin nombre)';
+    out += `${'='.repeat(64)}\n`;
+    out += `CONVERSACIÓN: +${waId} — ${nombre}\n`;
+    out += `${'='.repeat(64)}\n`;
+    for (const m of chat.mensajes) {
+      const { fecha, hora } = toGMTMinus4(m.created_at);
+      const quien = m.direction === 'out' ? 'BOT/VENDEDOR' : 'CLIENTE';
+      const estado = (m.direction === 'out' && m.status) ? ` [${m.status}]` : '';
+      const texto = (m.text || '[sin texto]').replace(/\n/g, ' ');
+      out += `[${fecha} ${hora}] ${quien}${estado}: ${texto}\n`;
+    }
+    out += `\n`;
+  }
+
+  const nombreArchivo = `conversaciones_${dias}dias_${ahoraBolivia.fecha}.txt`;
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+  res.send(out);
 });
 
 // ── CHAT INDIVIDUAL ───────────────────────────────────────────────────────
