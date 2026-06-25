@@ -14,6 +14,8 @@ const {
   updateProducto,
   insertProducto,
   deleteProducto,
+  tieneFlag,
+  marcarFlag,
 } = require('./db');
 
 const app = express();
@@ -87,7 +89,8 @@ INFORMACIÓN DEL NEGOCIO:
 - No tenemos fotos de las picadoras en este momento.
 - Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
 - Si preguntan por humedad de granos o semillas contestas con el MH-5, si es para ambientes, depositos, almacenes, centros de datos contestas con HIWIFI.
-- Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, comentá que pueden ver un equipo real funcionando en vivo. No escribas vos el link — se agrega automáticamente.
+- Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, comentá que pueden ver un equipo real funcionando en vivo. El link para verlo se agrega automáticamente la primera vez que se menciona el HiWIFI — no lo escribas vos.
+- Si más adelante en la conversación el cliente pide ver el equipo funcionando en vivo otra vez (por ejemplo, le preguntaste si quiere verlo y te dice que sí, o te lo pide directamente), agregá [VER_DEMO] al final de tu respuesta — eso vuelve a mandar el link automáticamente. NUNCA uses [FOLLETO_hiwifi] para esto: esa palabra clave es solo para la ficha técnica en imagen, no es lo mismo que el link en vivo.
 NIVEL DIGITAL — comportamiento especial:
 Cuando pregunten por el nivel, dá precio y beneficio principal en una línea y cerrá con UNA pregunta para continuar la conversación (ej: "¿lo usarías en obra o en soldadura/montaje?"). NUNCA mandés la ficha técnica de entrada — solo si el cliente la pide expresamente o ya mostró interés concreto en comprar. Si objetan con "uso nivel de burbuja" o "lo hago a ojo", respondé con el costo de corregir un error (tiempo, material, mano de obra) sin mencionar features.
 FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
@@ -101,8 +104,6 @@ CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
 }
 const conversaciones = {};
-const leadsAvisados = new Set(); // evita avisar 2 veces al mismo número en la misma sesión
-const demoEnviado = new Set();   // asegura que el link demo de HiWIFI salga una vez por conversación
 
 // ── HELPERS ───────────────────────────────────────────────────────────────
 function truncateConversation(from) {
@@ -715,8 +716,8 @@ app.post('/webhook', async (req, res) => {
 
           if (reply.includes('[LEAD_CALIENTE]')) {
             reply = reply.replace('[LEAD_CALIENTE]', '').trim();
-            if (!leadsAvisados.has(from)) {
-              leadsAvisados.add(from);
+            if (!tieneFlag(from, 'lead_avisado')) {
+              marcarFlag(from, 'lead_avisado');
               const nombreContacto = contactName ? `${contactName} — ` : '';
               const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${text}"`;
               try {
@@ -727,11 +728,21 @@ app.post('/webhook', async (req, res) => {
             }
           }
 
+          // Pedido explícito del cliente de ver el link en vivo otra vez (no la ficha en imagen)
+          if (reply.includes('[VER_DEMO]')) {
+            reply = reply.replace('[VER_DEMO]', '').trim();
+            marcarFlag(from, 'demo_link_enviado'); // idempotente, evita que el chequeo de abajo duplique
+            if (!reply.includes('hiwifi.app/p/HW1')) {
+              reply += `\n\n👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
+            }
+          }
+
           // Asegurar que el link demo del HiWIFI salga al menos una vez por conversación,
           // sin depender de que el modelo se acuerde de escribirlo cada vez.
+          // Persistido en DB (tabla flags) para que sobreviva a redeploys.
           const mencionaHiwifi = /hiwifi|higr[oó]metro/i.test(text) || /hiwifi/i.test(reply);
-          if (mencionaHiwifi && !demoEnviado.has(from)) {
-            demoEnviado.add(from);
+          if (mencionaHiwifi && !tieneFlag(from, 'demo_link_enviado')) {
+            marcarFlag(from, 'demo_link_enviado');
             if (!reply.includes('hiwifi.app/p/HW1')) {
               reply += `\n\n👉 Mirá un equipo real funcionando: [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
             }
