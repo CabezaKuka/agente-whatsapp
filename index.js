@@ -36,6 +36,35 @@ let modeloActivo = 'haiku'; // valor por defecto al iniciar el servidor
 
 const NOTIFICAR_A = '59177626675';
 
+// ── FLAGS POR NÚMERO (persistente en disco, NO depende de cambios en db.js) ─
+// Para recordar cosas como "ya le mandé el link demo" o "ya avisé que es lead
+// caliente" de forma que sobreviva a un redeploy, sin requerir tocar la base
+// de datos ni mantener dos archivos sincronizados.
+const fs = require('fs');
+const FLAGS_DIR  = '/app/data';
+const FLAGS_PATH = `${FLAGS_DIR}/flags.json`;
+let flags = {};
+try {
+  fs.mkdirSync(FLAGS_DIR, { recursive: true });
+  flags = JSON.parse(fs.readFileSync(FLAGS_PATH, 'utf8'));
+} catch (err) {
+  flags = {}; // primera vez, archivo no existe todavía — no es un error real
+}
+
+function tieneFlag(waId, flag) {
+  return !!(flags[waId] && flags[waId][flag]);
+}
+
+function marcarFlag(waId, flag) {
+  if (!flags[waId]) flags[waId] = {};
+  flags[waId][flag] = true;
+  try {
+    fs.writeFileSync(FLAGS_PATH, JSON.stringify(flags));
+  } catch (err) {
+    console.error('❌ Error guardando flags.json (no crítico):', err.message);
+  }
+}
+
 const FOLLETOS = {
   clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
   mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
@@ -62,6 +91,7 @@ function buildSystemPrompt() {
 Hoy es ${diaActual} ${fechaActual} (hora Bolivia, GMT-4).
 Respondés como una persona real, nunca te identificás como bot ni asistente virtual.
 Mensajes MUY cortos — máximo 2 líneas, sin excepción.
+En el PRIMER mensaje de cada conversación sé todavía más breve: una frase con el precio o el beneficio principal, y cerrá con UNA sola pregunta para entender qué necesita el cliente. No menciones specs, características adicionales ni casos de uso en ese primer mensaje — guardalos para la respuesta siguiente, una vez que el cliente ya contestó algo.
 NUNCA usás guiones, viñetas ni listas. Todo en texto corrido.
 Los clientes escriben con ortografía informal, abreviaciones y errores típicos del español boliviano. Interpretá siempre lo que quisieron decir, nunca respondas como si no entendieras.
 Cuando preguntan por un equipo, das el precio directo y una característica clave sin preguntar antes.
@@ -70,6 +100,7 @@ Solo preguntás cuando hay dos o más productos que podrían encajar y necesitá
 Si el cliente pregunta poco, respondés con lo más relevante. Si profundiza, profundizás vos también.
 Si el cliente saluda, saludás y preguntás en qué podés ayudar, sin presentarte.
 Si quiere hacer un pedido o hablar con alguien, le decís que contacte al 76317951 (Solo WhatsAPP).
+LEAD CALIENTE — aviso interno (no se lo mencionás al cliente): si el cliente pide una cotización formal, menciona una cantidad de unidades (2 o más), dice explícitamente que quiere comprar o hacer el pedido ya, o pregunta por forma de pago/factura para concretar, agregá al final de tu respuesta la palabra [LEAD_CALIENTE]. Va ADEMÁS de tu respuesta normal al cliente, nunca en su lugar, y el cliente nunca debe ver esa palabra. No la uses para preguntas técnicas generales ni curiosidad sin intención real de compra.
 SOLO usás info del catálogo y la información del negocio. Si un producto no está en el catálogo, no inventés precio ni características — decí que vas a consultar y que escriban al 76317951 (Solo WhatsAPP).
 NUNCA inventés palabras clave — solo usás exactamente las definidas en FOLLETOS-IMAGENES DISPONIBLES.
 INFORMACIÓN DEL NEGOCIO:
@@ -85,7 +116,8 @@ INFORMACIÓN DEL NEGOCIO:
 - No tenemos fotos de las picadoras en este momento.
 - Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
 - Si preguntan por humedad de granos o semillas contestas con el MH-5, si es para ambientes, depositos, almacenes, centros de datos contestas con HIWIFI.
-- Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, mandá el link público de un dispositivo real para que vean la app funcionando, ademas de la respuesta normal: "[HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)" Ejemplo: "Te paso un equipo real para que veas cómo se ve 👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)"
+- Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, comentá que pueden ver un equipo real funcionando en vivo. El link para verlo se agrega automáticamente la primera vez que se menciona el HiWIFI — no lo escribas vos.
+- Si más adelante en la conversación el cliente pide ver el equipo funcionando en vivo otra vez (por ejemplo, le preguntaste si quiere verlo y te dice que sí, o te lo pide directamente), agregá [VER_DEMO] al final de tu respuesta — eso vuelve a mandar el link automáticamente. NUNCA uses [FOLLETO_hiwifi] para esto: esa palabra clave es solo para la ficha técnica en imagen, no es lo mismo que el link en vivo.
 NIVEL DIGITAL — comportamiento especial:
 Cuando pregunten por el nivel, dá precio y beneficio principal en una línea y cerrá con UNA pregunta para continuar la conversación (ej: "¿lo usarías en obra o en soldadura/montaje?"). NUNCA mandés la ficha técnica de entrada — solo si el cliente la pide expresamente o ya mostró interés concreto en comprar. Si objetan con "uso nivel de burbuja" o "lo hago a ojo", respondé con el costo de corregir un error (tiempo, material, mano de obra) sin mencionar features.
 FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
@@ -670,89 +702,147 @@ app.post('/webhook', async (req, res) => {
           const messageId = msg.id;
           if (!from) continue;
 
-          if (msg.type === 'audio') {
-            saveIncoming({ waId: from, name: contactName, text: '[Audio recibido]', metaMessageId: messageId });
-            const replyText = 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊';
-            const result = await enviarMensaje(from, replyText);
-            saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
-            //await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
-            continue;
+          // Cada mensaje se procesa en su propio try/catch: si algo falla por
+          // cualquier motivo, el cliente recibe un aviso en vez de silencio total,
+          // y el resto de los mensajes del lote no se ven afectados.
+          try {
+            if (msg.type === 'audio') {
+              saveIncoming({ waId: from, name: contactName, text: '[Audio recibido]', metaMessageId: messageId });
+              const replyText = 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊';
+              const result = await enviarMensaje(from, replyText);
+              saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
+              //await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
+              continue;
+            }
+
+            if (msg.type !== 'text') {
+              saveIncoming({ waId: from, name: contactName, text: `[Mensaje ${msg.type || 'no soportado'} recibido]`, metaMessageId: messageId });
+              const replyText = 'Solo puedo responder mensajes de texto por ahora. Escribime tu consulta 😊';
+              const result = await enviarMensaje(from, replyText);
+              saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
+              continue;
+            }
+
+            const text = msg.text?.body || '';
+            console.log(`📩 Mensaje de ${from}: ${text}`);
+            saveIncoming({ waId: from, name: contactName, text, metaMessageId: messageId });
+
+            if (!conversaciones[from]) conversaciones[from] = [];
+            conversaciones[from].push({ role: 'user', content: text });
+            truncateConversation(from);
+
+            // Construir prompt con catálogo actualizado desde DB
+            const systemPrompt = buildSystemPrompt();
+
+            const respuesta = await ai.messages.create({
+              model: MODELOS[modeloActivo],
+              max_tokens: 500,
+              system: systemPrompt,
+              messages: conversaciones[from]
+            });
+
+            let reply = respuesta.content?.[0]?.text || 'Perdón, no pude responder bien. Escribime de nuevo por favor.';
+            conversaciones[from].push({ role: 'assistant', content: reply });
+            truncateConversation(from);
+
+            // ── Lead caliente y link demo: mejoras extra. Si algo de esto falla,
+            // NO debe tumbar la respuesta principal — por eso van en su propio
+            // try/catch, separado del resto.
+            try {
+              if (reply.includes('[LEAD_CALIENTE]')) {
+                reply = reply.replace('[LEAD_CALIENTE]', '').trim();
+                if (!tieneFlag(from, 'lead_avisado')) {
+                  marcarFlag(from, 'lead_avisado');
+                  const nombreContacto = contactName ? `${contactName} — ` : '';
+                  const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${text}"`;
+                  try {
+                    await enviarMensaje(NOTIFICAR_A, avisoTexto);
+                  } catch (err) {
+                    console.error('❌ Error notificando lead caliente:', err.message);
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('❌ Error en aviso de lead caliente (no afecta la respuesta al cliente):', err.message);
+            }
+
+            try {
+              // Pedido explícito del cliente de ver el link en vivo otra vez (no la ficha en imagen)
+              if (reply.includes('[VER_DEMO]')) {
+                reply = reply.replace('[VER_DEMO]', '').trim();
+                marcarFlag(from, 'demo_link_enviado'); // idempotente, evita que el chequeo de abajo duplique
+                if (!reply.includes('hiwifi.app/p/HW1')) {
+                  reply += `\n\n👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
+                }
+              }
+
+              // Asegurar que el link demo del HiWIFI salga al menos una vez por conversación,
+              // sin depender de que el modelo se acuerde de escribirlo cada vez.
+              const mencionaHiwifi = /hiwifi|higr[oó]metro/i.test(text) || /hiwifi/i.test(reply);
+              if (mencionaHiwifi && !tieneFlag(from, 'demo_link_enviado')) {
+                marcarFlag(from, 'demo_link_enviado');
+                if (!reply.includes('hiwifi.app/p/HW1')) {
+                  reply += `\n\n👉 Mirá un equipo real funcionando: [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
+                }
+              }
+            } catch (err) {
+              console.error('❌ Error agregando link demo (no afecta el resto de la respuesta):', err.message);
+            }
+
+            if (reply.includes('[ENVIAR_UBICACION]')) {
+              const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
+              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+              const r2 = await enviarUbicacion(from);
+              saveOutgoing({ waId: from, text: '[Ubicación enviada]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+
+            } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
+              const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
+              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+              const r2 = await enviarImagen(from, FOLLETOS.clasificadora);
+              saveOutgoing({ waId: from, text: '[Imagen: folleto clasificadora]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+
+            } else if (reply.includes('[FOLLETO_MH5]')) {
+              const texto = reply.replace('[FOLLETO_MH5]', '').trim();
+              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+              const r1 = await enviarImagen(from, FOLLETOS.mh5_1);
+              saveOutgoing({ waId: from, text: '[Imagen: MH5 1]', metaMessageId: extractMetaMessageId(r1), status: 'sent' });
+              const r2 = await enviarImagen(from, FOLLETOS.mh5_2);
+              saveOutgoing({ waId: from, text: '[Imagen: MH5 2]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+
+            } else if (reply.includes('[FOLLETO_ZARANDA]')) {
+              const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
+              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+              const r2 = await enviarImagen(from, FOLLETOS.zaranda);
+              saveOutgoing({ waId: from, text: '[Imagen: folleto zaranda]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+
+            } else if (reply.includes('[FOLLETO_NIVEL]')) {
+              const texto = reply.replace('[FOLLETO_NIVEL]', '').trim();
+              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+              const r2 = await enviarImagen(from, FOLLETOS.nivel);
+              saveOutgoing({ waId: from, text: '[Imagen: folleto nivel]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+
+            } else if (reply.includes('[FOLLETO_hiwifi]')) {
+              const texto = reply.replace('[FOLLETO_hiwifi]', '').trim();
+              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+              const r2 = await enviarImagen(from, FOLLETOS.hiwifi);
+              saveOutgoing({ waId: from, text: '[Imagen: folleto hiwifi]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+            }
+            else {
+              const r = await enviarMensaje(from, reply);
+              saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
+            }
+
+            console.log(`✅ Respuesta enviada a ${from}`);
+          } catch (err) {
+            console.error(`❌ Error procesando mensaje de ${from}:`, err.message);
+            try {
+              const fallback = 'Disculpá, tuve un problema técnico procesando tu mensaje. ¿Podés escribirlo de nuevo?';
+              const r = await enviarMensaje(from, fallback);
+              saveOutgoing({ waId: from, text: fallback, metaMessageId: extractMetaMessageId(r), status: 'sent' });
+            } catch (err2) {
+              console.error(`❌ Error mandando el aviso de fallback a ${from}:`, err2.message);
+            }
           }
-
-          if (msg.type !== 'text') {
-            saveIncoming({ waId: from, name: contactName, text: `[Mensaje ${msg.type || 'no soportado'} recibido]`, metaMessageId: messageId });
-            const replyText = 'Solo puedo responder mensajes de texto por ahora. Escribime tu consulta 😊';
-            const result = await enviarMensaje(from, replyText);
-            saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
-            continue;
-          }
-
-          const text = msg.text?.body || '';
-          console.log(`📩 Mensaje de ${from}: ${text}`);
-          saveIncoming({ waId: from, name: contactName, text, metaMessageId: messageId });
-
-          if (!conversaciones[from]) conversaciones[from] = [];
-          conversaciones[from].push({ role: 'user', content: text });
-          truncateConversation(from);
-
-          // Construir prompt con catálogo actualizado desde DB
-          const systemPrompt = buildSystemPrompt();
-
-          const respuesta = await ai.messages.create({
-            model: MODELOS[modeloActivo],
-            max_tokens: 500,
-            system: systemPrompt,
-            messages: conversaciones[from]
-          });
-
-          let reply = respuesta.content?.[0]?.text || 'Perdón, no pude responder bien. Escribime de nuevo por favor.';
-          conversaciones[from].push({ role: 'assistant', content: reply });
-          truncateConversation(from);
-
-          if (reply.includes('[ENVIAR_UBICACION]')) {
-            const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
-            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-            const r2 = await enviarUbicacion(from);
-            saveOutgoing({ waId: from, text: '[Ubicación enviada]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-          } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
-            const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
-            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-            const r2 = await enviarImagen(from, FOLLETOS.clasificadora);
-            saveOutgoing({ waId: from, text: '[Imagen: folleto clasificadora]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-          } else if (reply.includes('[FOLLETO_MH5]')) {
-            const texto = reply.replace('[FOLLETO_MH5]', '').trim();
-            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-            const r1 = await enviarImagen(from, FOLLETOS.mh5_1);
-            saveOutgoing({ waId: from, text: '[Imagen: MH5 1]', metaMessageId: extractMetaMessageId(r1), status: 'sent' });
-            const r2 = await enviarImagen(from, FOLLETOS.mh5_2);
-            saveOutgoing({ waId: from, text: '[Imagen: MH5 2]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-          } else if (reply.includes('[FOLLETO_ZARANDA]')) {
-            const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
-            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-            const r2 = await enviarImagen(from, FOLLETOS.zaranda);
-            saveOutgoing({ waId: from, text: '[Imagen: folleto zaranda]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-         
-          } else if (reply.includes('[FOLLETO_NIVEL]')) {
-            const texto = reply.replace('[FOLLETO_NIVEL]', '').trim();
-            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-            const r2 = await enviarImagen(from, FOLLETOS.nivel);
-            saveOutgoing({ waId: from, text: '[Imagen: folleto nivel]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-          } else if (reply.includes('[FOLLETO_hiwifi]')) {
-            const texto = reply.replace('[FOLLETO_hiwifi]', '').trim();
-            if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-            const r2 = await enviarImagen(from, FOLLETOS.hiwifi);
-            saveOutgoing({ waId: from, text: '[Imagen: folleto hiwifi]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-          }   
-          else {
-            const r = await enviarMensaje(from, reply);
-            saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
-          }
-
-          console.log(`✅ Respuesta enviada a ${from}`);
         }
       }
     }
