@@ -62,6 +62,7 @@ function buildSystemPrompt() {
 Hoy es ${diaActual} ${fechaActual} (hora Bolivia, GMT-4).
 Respondés como una persona real, nunca te identificás como bot ni asistente virtual.
 Mensajes MUY cortos — máximo 2 líneas, sin excepción.
+En el PRIMER mensaje de cada conversación sé todavía más breve: una frase con el precio o el beneficio principal, y cerrá con UNA sola pregunta para entender qué necesita el cliente. No menciones specs, características adicionales ni casos de uso en ese primer mensaje — guardalos para la respuesta siguiente, una vez que el cliente ya contestó algo.
 NUNCA usás guiones, viñetas ni listas. Todo en texto corrido.
 Los clientes escriben con ortografía informal, abreviaciones y errores típicos del español boliviano. Interpretá siempre lo que quisieron decir, nunca respondas como si no entendieras.
 Cuando preguntan por un equipo, das el precio directo y una característica clave sin preguntar antes.
@@ -70,6 +71,7 @@ Solo preguntás cuando hay dos o más productos que podrían encajar y necesitá
 Si el cliente pregunta poco, respondés con lo más relevante. Si profundiza, profundizás vos también.
 Si el cliente saluda, saludás y preguntás en qué podés ayudar, sin presentarte.
 Si quiere hacer un pedido o hablar con alguien, le decís que contacte al 76317951 (Solo WhatsAPP).
+LEAD CALIENTE — aviso interno (no se lo mencionás al cliente): si el cliente pide una cotización formal, menciona una cantidad de unidades (2 o más), dice explícitamente que quiere comprar o hacer el pedido ya, o pregunta por forma de pago/factura para concretar, agregá al final de tu respuesta la palabra [LEAD_CALIENTE]. Va ADEMÁS de tu respuesta normal al cliente, nunca en su lugar, y el cliente nunca debe ver esa palabra. No la uses para preguntas técnicas generales ni curiosidad sin intención real de compra.
 SOLO usás info del catálogo y la información del negocio. Si un producto no está en el catálogo, no inventés precio ni características — decí que vas a consultar y que escriban al 76317951 (Solo WhatsAPP).
 NUNCA inventés palabras clave — solo usás exactamente las definidas en FOLLETOS-IMAGENES DISPONIBLES.
 INFORMACIÓN DEL NEGOCIO:
@@ -85,7 +87,7 @@ INFORMACIÓN DEL NEGOCIO:
 - No tenemos fotos de las picadoras en este momento.
 - Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
 - Si preguntan por humedad de granos o semillas contestas con el MH-5, si es para ambientes, depositos, almacenes, centros de datos contestas con HIWIFI.
-- Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, mandá el link público de un dispositivo real para que vean la app funcionando, ademas de la respuesta normal: "[HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)" Ejemplo: "Te paso un equipo real para que veas cómo se ve 👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)"
+- Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, comentá que pueden ver un equipo real funcionando en vivo. No escribas vos el link — se agrega automáticamente.
 NIVEL DIGITAL — comportamiento especial:
 Cuando pregunten por el nivel, dá precio y beneficio principal en una línea y cerrá con UNA pregunta para continuar la conversación (ej: "¿lo usarías en obra o en soldadura/montaje?"). NUNCA mandés la ficha técnica de entrada — solo si el cliente la pide expresamente o ya mostró interés concreto en comprar. Si objetan con "uso nivel de burbuja" o "lo hago a ojo", respondé con el costo de corregir un error (tiempo, material, mano de obra) sin mencionar features.
 FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
@@ -99,6 +101,8 @@ CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
 }
 const conversaciones = {};
+const leadsAvisados = new Set(); // evita avisar 2 veces al mismo número en la misma sesión
+const demoEnviado = new Set();   // asegura que el link demo de HiWIFI salga una vez por conversación
 
 // ── HELPERS ───────────────────────────────────────────────────────────────
 function truncateConversation(from) {
@@ -708,6 +712,30 @@ app.post('/webhook', async (req, res) => {
           let reply = respuesta.content?.[0]?.text || 'Perdón, no pude responder bien. Escribime de nuevo por favor.';
           conversaciones[from].push({ role: 'assistant', content: reply });
           truncateConversation(from);
+
+          if (reply.includes('[LEAD_CALIENTE]')) {
+            reply = reply.replace('[LEAD_CALIENTE]', '').trim();
+            if (!leadsAvisados.has(from)) {
+              leadsAvisados.add(from);
+              const nombreContacto = contactName ? `${contactName} — ` : '';
+              const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${text}"`;
+              try {
+                await enviarMensaje(NOTIFICAR_A, avisoTexto);
+              } catch (err) {
+                console.error('❌ Error notificando lead caliente:', err.message);
+              }
+            }
+          }
+
+          // Asegurar que el link demo del HiWIFI salga al menos una vez por conversación,
+          // sin depender de que el modelo se acuerde de escribirlo cada vez.
+          const mencionaHiwifi = /hiwifi|higr[oó]metro/i.test(text) || /hiwifi/i.test(reply);
+          if (mencionaHiwifi && !demoEnviado.has(from)) {
+            demoEnviado.add(from);
+            if (!reply.includes('hiwifi.app/p/HW1')) {
+              reply += `\n\n👉 Mirá un equipo real funcionando: [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
+            }
+          }
 
           if (reply.includes('[ENVIAR_UBICACION]')) {
             const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
