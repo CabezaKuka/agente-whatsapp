@@ -749,17 +749,22 @@ app.post('/webhook', async (req, res) => {
             // NO debe tumbar la respuesta principal — por eso van en su propio
             // try/catch, separado del resto.
             try {
-              if (reply.includes('[LEAD_CALIENTE]')) {
-                reply = reply.replace('[LEAD_CALIENTE]', '').trim();
-                if (!tieneFlag(from, 'lead_avisado')) {
-                  marcarFlag(from, 'lead_avisado');
-                  const nombreContacto = contactName ? `${contactName} — ` : '';
-                  const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${text}"`;
-                  try {
-                    await enviarMensaje(NOTIFICAR_A, avisoTexto);
-                  } catch (err) {
-                    console.error('❌ Error notificando lead caliente:', err.message);
-                  }
+              const pideMarcador = reply.includes('[LEAD_CALIENTE]');
+              if (pideMarcador) reply = reply.replace('[LEAD_CALIENTE]', '').trim();
+
+              // Respaldo por palabra clave: el modelo no siempre se acuerda de
+              // poner el marcador aunque el cliente diga "cotización" textualmente
+              // (pasó en producción más de una vez) — esto no depende de él.
+              const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(text);
+
+              if ((pideMarcador || pareceCotizacion) && !tieneFlag(from, 'lead_avisado')) {
+                marcarFlag(from, 'lead_avisado');
+                const nombreContacto = contactName ? `${contactName} — ` : '';
+                const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${text}"`;
+                try {
+                  await enviarMensaje(NOTIFICAR_A, avisoTexto);
+                } catch (err) {
+                  console.error('❌ Error notificando lead caliente:', err.message);
                 }
               }
             } catch (err) {
