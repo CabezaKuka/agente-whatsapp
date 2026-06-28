@@ -153,6 +153,17 @@ function escapeAttr(value) {
   return String(value ?? '').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+// Para atributos data-* que se leen vía JS (dataset), nunca dentro de onclick.
+// A diferencia de escapeAttr, esto SÍ escapa saltos de línea (con &#10;) para
+// que una descripción multilínea no rompa el atributo HTML.
+function escapeDataAttr(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+    .replace(/\r\n|\r|\n/g, '&#10;');
+}
+
 function extractMetaMessageId(result) {
   return result?.messages?.[0]?.id || null;
 }
@@ -585,7 +596,7 @@ app.get('/admin', (req, res) => {
         <div class="precio">${escapeHtml(item.precio)}</div>
         <div class="desc">${escapeHtml(item.descripcion)}</div>
         <div class="btn-row">
-          <button class="btn btn-edit" onclick="abrirEditor(${item.id}, '${escapeAttr(item.nombre)}', '${escapeAttr(item.precio)}', '${escapeAttr(item.stock)}', '${escapeAttr(item.descripcion)}')">✏️ Editar</button>
+          <button class="btn btn-edit" data-id="${item.id}" data-nombre="${escapeDataAttr(item.nombre)}" data-precio="${escapeDataAttr(item.precio)}" data-stock="${escapeDataAttr(item.stock)}" data-desc="${escapeDataAttr(item.descripcion)}">✏️ Editar</button>
           <form method="post" action="/admin/eliminar" style="display:inline" onsubmit="return confirm('¿Eliminar ${escapeAttr(item.nombre)}?')">
             <input type="hidden" name="id" value="${item.id}">
             <button type="submit" class="btn btn-del">🗑 Eliminar</button>
@@ -645,6 +656,20 @@ app.get('/admin', (req, res) => {
     }
     document.getElementById('modalOverlay').addEventListener('click', function(e) {
       if (e.target === this) cerrarEditor();
+    });
+    // Engancha cada botón "Editar" leyendo sus data-* en vez de pasar los
+    // datos crudos dentro de un onclick (eso se rompía con descripciones
+    // multilínea o con apóstrofes).
+    document.querySelectorAll('.btn-edit').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        abrirEditor(
+          this.dataset.id,
+          this.dataset.nombre,
+          this.dataset.precio,
+          this.dataset.stock,
+          this.dataset.desc
+        );
+      });
     });
   </script>
 </body></html>`;
