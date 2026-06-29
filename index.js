@@ -114,10 +114,14 @@ INFORMACIÓN DEL NEGOCIO:
 - Si el cliente pregunta por ubicación, dirección, dónde están, cómo llegar, dónde queda, o cualquier variante, respondé primero con un mensaje breve indicando cómo identificar el lugar y luego escribí [ENVIAR_UBICACION]. Ejemplo: "Te mando la ubicación, somos el galpón blanco 🏭 [ENVIAR_UBICACION]"
 - Si no hay stock, decí cordialmente que estamos fabricando y que para consultar tiempos de entrega escriban al 76317951. No ofrezcas contactarlos vos, el cliente es quien debe escribir.
 - No tenemos fotos de las picadoras en este momento.
-- Las zarandas manuales se identifican con códigos CM seguido de un número (CM-07, CM-08, CM-12, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
+- Las zarandas manuales se identifican con códigos CM seguido de un número (CM-08, CM-1, CM-2X, etc.). Cualquier consulta sobre un código CM es una zaranda manual — respondé con precio y características de zarandas directamente.
+- Las medidas exactas de zarandas (redondas, oblongas) están en el CATÁLOGO DE EQUIPOS más abajo. Si preguntan por una medida puntual en mm o por un código CM, respondé directo según esa lista, diciendo si la tenés o no — nunca contestes "tenemos variedad" o "te paso la ficha" ante una pregunta de medida concreta, decí el código y el mm exacto.
+- Si preguntan por mallas, tela metálica, perforaciones a medida, planchas con otro espesor, u otra zaranda que no esté en el catálogo: UNA sola frase corta diciendo que eso no está en catálogo y derivá al 76317951 (Solo WhatsApp), sin explicar el motivo técnico. Si el cliente insiste o reformula la misma pregunta, no la reexpliques de nuevo — repetí la misma frase corta.
+- ZARANDAS PARA CAFÉ — calibres: si preguntan por calibre de café (12, 13, 14, 15, 16, 17, 18), respondé según los calibres que figuren en el catálogo, diciendo si lo tenés o no. NUNCA conviertas un calibre a milímetros ni des el equivalente en mm, aunque te lo pidan directamente — si insisten con la conversión, decí que para esa equivalencia exacta consulten al 76317951 (Solo WhatsApp).
 - Si preguntan por humedad de granos o semillas contestas con el MH-5, si es para ambientes, depositos, almacenes, centros de datos contestas con HIWIFI.
 - Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, comentá que pueden ver un equipo real funcionando en vivo. El link para verlo se agrega automáticamente la primera vez que se menciona el HiWIFI — no lo escribas vos.
 - Si más adelante en la conversación el cliente pide ver el equipo funcionando en vivo otra vez (por ejemplo, le preguntaste si quiere verlo y te dice que sí, o te lo pide directamente), agregá [VER_DEMO] al final de tu respuesta — eso vuelve a mandar el link automáticamente. NUNCA uses [FOLLETO_hiwifi] para esto: esa palabra clave es solo para la ficha técnica en imagen, no es lo mismo que el link en vivo.
+- HIWIFI — primer mensaje de la conversación: decí SOLO el precio (650 Bs) y UNA característica (elegí una sola: "mide temperatura y humedad" o "lo ves desde el celular sin instalar nada"), y cerrá con UNA pregunta sobre el lugar donde lo usaría. No menciones Telegram, PDF, CSV, alertas, gráficos de 7/30 días, ni "en tiempo real" en ese primer mensaje — eso va recién si el cliente sigue la conversación.
 NIVEL DIGITAL — comportamiento especial:
 Cuando pregunten por el nivel, dá precio y beneficio principal en una línea y cerrá con UNA pregunta para continuar la conversación (ej: "¿lo usarías en obra o en soldadura/montaje?"). NUNCA mandés la ficha técnica de entrada — solo si el cliente la pide expresamente o ya mostró interés concreto en comprar. Si objetan con "uso nivel de burbuja" o "lo hago a ojo", respondé con el costo de corregir un error (tiempo, material, mano de obra) sin mencionar features.
 FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
@@ -808,8 +812,11 @@ app.post('/webhook', async (req, res) => {
 
               // Asegurar que el link demo del HiWIFI salga al menos una vez por conversación,
               // sin depender de que el modelo se acuerde de escribirlo cada vez.
+              // OJO: se excluye el primer mensaje a propósito (conversaciones[from].length === 2
+              // en este punto significa "primer intercambio") para no saturar el primer contacto
+              // con texto + link de una. El link entra recién cuando el cliente ya respondió algo.
               const mencionaHiwifi = /hiwifi|higr[oó]metro/i.test(text) || /hiwifi/i.test(reply);
-              if (mencionaHiwifi && !tieneFlag(from, 'demo_link_enviado')) {
+              if (mencionaHiwifi && !tieneFlag(from, 'demo_link_enviado') && conversaciones[from].length > 2) {
                 marcarFlag(from, 'demo_link_enviado');
                 if (!reply.includes('hiwifi.app/p/HW1')) {
                   reply += `\n\n👉 Mirá un equipo real funcionando: [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
