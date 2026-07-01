@@ -20,9 +20,6 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const path = require('path');
-app.use('/img', express.static(path.join(__dirname)));
-
 initDb();
 
 const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -68,14 +65,13 @@ function marcarFlag(waId, flag) {
   }
 }
 
-const BASE_URL = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
 const FOLLETOS = {
-  clasificadora: `${BASE_URL}/img/CG3-CG3E.png`,
-  mh5_1:         `${BASE_URL}/img/MH5-1.png`,
-  mh5_2:         `${BASE_URL}/img/MH5-2.png`,
-  zaranda:        `${BASE_URL}/img/lista2.png`,
-  nivel:          `${BASE_URL}/img/folletoAXIS1.png`,
-  hiwifi:         `${BASE_URL}/img/fichaHiWIFI.png`,
+  clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
+  mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
+  mh5_2:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
+  zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista2.png',
+  nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS1.png',
+  hiwifi:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaHiWIFI.png',
 };
 
 function buildSystemPrompt() {
