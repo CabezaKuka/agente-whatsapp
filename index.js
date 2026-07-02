@@ -758,120 +758,26 @@ app.post('/webhook', async (req, res) => {
             console.log(`📩 Mensaje de ${from}: ${text}`);
             saveIncoming({ waId: from, name: contactName, text, metaMessageId: messageId });
 
-            if (!conversaciones[from]) conversaciones[from] = [];
-            conversaciones[from].push({ role: 'user', content: text });
-            truncateConversation(from);
-
-            // Construir prompt con catálogo actualizado desde DB
-            const systemPrompt = buildSystemPrompt();
-
-            const respuesta = await ai.messages.create({
-              model: MODELOS[modeloActivo],
-              max_tokens: 500,
-              system: systemPrompt,
-              messages: conversaciones[from]
-            });
-
-            let reply = respuesta.content?.[0]?.text || 'Perdón, no pude responder bien. Escribime de nuevo por favor.';
-            conversaciones[from].push({ role: 'assistant', content: reply });
-            truncateConversation(from);
-
-            // ── Lead caliente y link demo: mejoras extra. Si algo de esto falla,
-            // NO debe tumbar la respuesta principal — por eso van en su propio
-            // try/catch, separado del resto.
-            try {
-              const pideMarcador = reply.includes('[LEAD_CALIENTE]');
-              if (pideMarcador) reply = reply.replace('[LEAD_CALIENTE]', '').trim();
-
-              // Respaldo por palabra clave: el modelo no siempre se acuerda de
-              // poner el marcador aunque el cliente diga "cotización" textualmente
-              // (pasó en producción más de una vez) — esto no depende de él.
-              const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(text);
-
-              if ((pideMarcador || pareceCotizacion) && !tieneFlag(from, 'lead_avisado')) {
-                marcarFlag(from, 'lead_avisado');
-                const nombreContacto = contactName ? `${contactName} — ` : '';
-                const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${text}"`;
-                try {
-                  await enviarMensaje(NOTIFICAR_A, avisoTexto);
-                } catch (err) {
-                  console.error('❌ Error notificando lead caliente:', err.message);
-                }
-              }
-            } catch (err) {
-              console.error('❌ Error en aviso de lead caliente (no afecta la respuesta al cliente):', err.message);
+            // ── DEBOUNCE: acumular mensajes y esperar antes de procesar ──
+            // NOTIFICAR_A (el dueño) responde al instante siempre.
+            if (from === NOTIFICAR_A) {
+              // Respuesta instantánea para el dueño — sin debounce
+              if (!conversaciones[from]) conversaciones[from] = [];
+              conversaciones[from].push({ role: 'user', content: text });
+              truncateConversation(from);
+              await procesarMensajes(from);
+            } else {
+              // Para todos los demás: acumular y reiniciar el timer
+              if (!pendingMessages[from]) pendingMessages[from] = [];
+              pendingMessages[from].push({ text, contactName, messageId });
+              if (pendingTimers[from]) clearTimeout(pendingTimers[from]);
+              pendingTimers[from] = setTimeout(() => {
+                delete pendingTimers[from];
+                procesarMensajes(from).catch(err =>
+                  console.error(`❌ Error en debounce handler de ${from}:`, err.message)
+                );
+              }, DEBOUNCE_MS);
             }
-
-            try {
-              // Pedido explícito del cliente de ver el link en vivo otra vez (no la ficha en imagen)
-              if (reply.includes('[VER_DEMO]')) {
-                reply = reply.replace('[VER_DEMO]', '').trim();
-                marcarFlag(from, 'demo_link_enviado'); // idempotente, evita que el chequeo de abajo duplique
-                if (!reply.includes('hiwifi.app/p/HW1')) {
-                  reply += `\n\n👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
-                }
-              }
-
-              // Asegurar que el link demo del HiWIFI salga al menos una vez por conversación,
-              // sin depender de que el modelo se acuerde de escribirlo cada vez.
-              // OJO: se excluye el primer mensaje a propósito (conversaciones[from].length === 2
-              // en este punto significa "primer intercambio") para no saturar el primer contacto
-              // con texto + link de una. El link entra recién cuando el cliente ya respondió algo.
-              const mencionaHiwifi = /hiwifi|higr[oó]metro/i.test(text) || /hiwifi/i.test(reply);
-              if (mencionaHiwifi && !tieneFlag(from, 'demo_link_enviado') && conversaciones[from].length > 2) {
-                marcarFlag(from, 'demo_link_enviado');
-                if (!reply.includes('hiwifi.app/p/HW1')) {
-                  reply += `\n\n👉 Mirá un equipo real funcionando: [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
-                }
-              }
-            } catch (err) {
-              console.error('❌ Error agregando link demo (no afecta el resto de la respuesta):', err.message);
-            }
-
-            if (reply.includes('[ENVIAR_UBICACION]')) {
-              const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
-              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-              const r2 = await enviarUbicacion(from);
-              saveOutgoing({ waId: from, text: '[Ubicación enviada]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-            } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
-              const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
-              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-              const r2 = await enviarImagen(from, FOLLETOS.clasificadora);
-              saveOutgoing({ waId: from, text: '[Imagen: folleto clasificadora]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-            } else if (reply.includes('[FOLLETO_MH5]')) {
-              const texto = reply.replace('[FOLLETO_MH5]', '').trim();
-              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-              const r1 = await enviarImagen(from, FOLLETOS.mh5_1);
-              saveOutgoing({ waId: from, text: '[Imagen: MH5 1]', metaMessageId: extractMetaMessageId(r1), status: 'sent' });
-              const r2 = await enviarImagen(from, FOLLETOS.mh5_2);
-              saveOutgoing({ waId: from, text: '[Imagen: MH5 2]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-            } else if (reply.includes('[FOLLETO_ZARANDA]')) {
-              const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
-              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-              const r2 = await enviarImagen(from, FOLLETOS.zaranda);
-              saveOutgoing({ waId: from, text: '[Imagen: folleto zaranda]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-            } else if (reply.includes('[FOLLETO_NIVEL]')) {
-              const texto = reply.replace('[FOLLETO_NIVEL]', '').trim();
-              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-              const r2 = await enviarImagen(from, FOLLETOS.nivel);
-              saveOutgoing({ waId: from, text: '[Imagen: folleto nivel]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-
-            } else if (reply.includes('[FOLLETO_hiwifi]')) {
-              const texto = reply.replace('[FOLLETO_hiwifi]', '').trim();
-              if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
-              const r2 = await enviarImagen(from, FOLLETOS.hiwifi);
-              saveOutgoing({ waId: from, text: '[Imagen: folleto hiwifi]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
-            }
-            else {
-              const r = await enviarMensaje(from, reply);
-              saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
-            }
-
-            console.log(`✅ Respuesta enviada a ${from}`);
           } catch (err) {
             console.error(`❌ Error procesando mensaje de ${from}:`, err.message);
             try {
@@ -889,6 +795,117 @@ app.post('/webhook', async (req, res) => {
     console.error('❌ Error:', err.message);
   }
 });
+
+// ── DEBOUNCE ─────────────────────────────────────────────────────────────
+// Agrupa mensajes seguidos del mismo número antes de llamar a Claude.
+// El número NOTIFICAR_A (el dueño) siempre responde al instante.
+const DEBOUNCE_MS = 2 * 60 * 1000; // 2 minutos
+const pendingTimers   = {}; // { waId: timeoutId }
+const pendingMessages = {}; // { waId: [{ text, contactName, messageId }] }
+
+async function procesarMensajes(from) {
+  const lote = pendingMessages[from] || [];
+  delete pendingMessages[from];
+  if (!lote.length) return;
+
+  // Unir todos los mensajes pendientes en un solo texto
+  const contactName = lote[lote.length - 1].contactName;
+  const textoCombinado = lote.map(m => m.text).join('\n');
+
+  try {
+    if (!conversaciones[from]) conversaciones[from] = [];
+    conversaciones[from].push({ role: 'user', content: textoCombinado });
+    truncateConversation(from);
+
+    const systemPrompt = buildSystemPrompt();
+    const respuesta = await ai.messages.create({
+      model: MODELOS[modeloActivo],
+      max_tokens: 500,
+      system: systemPrompt,
+      messages: conversaciones[from]
+    });
+
+    let reply = respuesta.content?.[0]?.text || 'Perdón, no pude responder bien. Escribime de nuevo por favor.';
+    conversaciones[from].push({ role: 'assistant', content: reply });
+    truncateConversation(from);
+
+    // ── Lead caliente
+    try {
+      const pideMarcador = reply.includes('[LEAD_CALIENTE]');
+      if (pideMarcador) reply = reply.replace('[LEAD_CALIENTE]', '').trim();
+      const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(textoCombinado);
+      if ((pideMarcador || pareceCotizacion) && !tieneFlag(from, 'lead_avisado')) {
+        marcarFlag(from, 'lead_avisado');
+        const nombreContacto = contactName ? `${contactName} — ` : '';
+        const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
+        try { await enviarMensaje(NOTIFICAR_A, avisoTexto); } catch (err) { console.error('❌ Error notificando lead caliente:', err.message); }
+      }
+    } catch (err) { console.error('❌ Error en aviso de lead caliente (no afecta la respuesta al cliente):', err.message); }
+
+    // ── Link demo HiWIFI
+    try {
+      if (reply.includes('[VER_DEMO]')) {
+        reply = reply.replace('[VER_DEMO]', '').trim();
+        marcarFlag(from, 'demo_link_enviado');
+        if (!reply.includes('hiwifi.app/p/HW1')) reply += `\n\n👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
+      }
+      const mencionaHiwifi = /hiwifi|higr[oó]metro/i.test(textoCombinado) || /hiwifi/i.test(reply);
+      if (mencionaHiwifi && !tieneFlag(from, 'demo_link_enviado') && conversaciones[from].length > 2) {
+        marcarFlag(from, 'demo_link_enviado');
+        if (!reply.includes('hiwifi.app/p/HW1')) reply += `\n\n👉 Mirá un equipo real funcionando: [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
+      }
+    } catch (err) { console.error('❌ Error agregando link demo (no afecta el resto de la respuesta):', err.message); }
+
+    // ── Enviar respuesta
+    if (reply.includes('[ENVIAR_UBICACION]')) {
+      const texto = reply.replace('[ENVIAR_UBICACION]', '').trim();
+      if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+      const r2 = await enviarUbicacion(from);
+      saveOutgoing({ waId: from, text: '[Ubicación enviada]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+    } else if (reply.includes('[FOLLETO_CLASIFICADORA]')) {
+      const texto = reply.replace('[FOLLETO_CLASIFICADORA]', '').trim();
+      if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+      const r2 = await enviarImagen(from, FOLLETOS.clasificadora);
+      saveOutgoing({ waId: from, text: '[Imagen: folleto clasificadora]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+    } else if (reply.includes('[FOLLETO_MH5]')) {
+      const texto = reply.replace('[FOLLETO_MH5]', '').trim();
+      if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+      const r1 = await enviarImagen(from, FOLLETOS.mh5_1);
+      saveOutgoing({ waId: from, text: '[Imagen: MH5 1]', metaMessageId: extractMetaMessageId(r1), status: 'sent' });
+      const r2 = await enviarImagen(from, FOLLETOS.mh5_2);
+      saveOutgoing({ waId: from, text: '[Imagen: MH5 2]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+    } else if (reply.includes('[FOLLETO_ZARANDA]')) {
+      const texto = reply.replace('[FOLLETO_ZARANDA]', '').trim();
+      if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+      const r2 = await enviarImagen(from, FOLLETOS.zaranda);
+      saveOutgoing({ waId: from, text: '[Imagen: folleto zaranda]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+    } else if (reply.includes('[FOLLETO_NIVEL]')) {
+      const texto = reply.replace('[FOLLETO_NIVEL]', '').trim();
+      if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+      const r2 = await enviarImagen(from, FOLLETOS.nivel);
+      saveOutgoing({ waId: from, text: '[Imagen: folleto nivel]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+    } else if (reply.includes('[FOLLETO_hiwifi]')) {
+      const texto = reply.replace('[FOLLETO_hiwifi]', '').trim();
+      if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+      const r2 = await enviarImagen(from, FOLLETOS.hiwifi);
+      saveOutgoing({ waId: from, text: '[Imagen: folleto hiwifi]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+    } else {
+      const r = await enviarMensaje(from, reply);
+      saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
+    }
+
+    console.log(`✅ Respuesta enviada a ${from}`);
+  } catch (err) {
+    console.error(`❌ Error procesando mensaje de ${from}:`, err.message);
+    try {
+      const fallback = 'Disculpá, tuve un problema técnico procesando tu mensaje. ¿Podés escribirlo de nuevo?';
+      const r = await enviarMensaje(from, fallback);
+      saveOutgoing({ waId: from, text: fallback, metaMessageId: extractMetaMessageId(r), status: 'sent' });
+    } catch (err2) {
+      console.error(`❌ Error mandando el aviso de fallback a ${from}:`, err2.message);
+    }
+  }
+}
 
 // ── ENVIAR TEXTO ──────────────────────────────────────────────────────────
 async function enviarMensaje(para, texto) {
