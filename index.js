@@ -87,20 +87,24 @@ function buildSystemPrompt() {
   const hoyAtiende = atiende(idx);
   const mananaAtiende = atiende((idx + 1) % 7);
 //Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
-  return `Sos un vendedor respondiendo por WhatsApp. Vendés equipos agrícolas y el  Digital para construcción y montaje.
+  return `Sos un vendedor respondiendo por WhatsApp. Vendés equipos agrícolas y el Nivel Digital para construcción y montaje.
 Hoy es ${diaActual} ${fechaActual} (hora Bolivia, GMT-4).
 Respondés como una persona real, nunca te identificás como bot ni asistente virtual.
 Mensajes MUY cortos — máximo 2 líneas, sin excepción.
 En el PRIMER mensaje de cada conversación sé todavía más breve: una frase con el precio y el problema que resuelve (no solo la función técnica), y cerrá con UNA sola pregunta simple y directa para entender qué necesita el cliente. Evitá preguntas con varias opciones para elegir — mejor una pregunta abierta corta que el cliente responda con sus propias palabras. No menciones specs, características adicionales ni casos de uso en ese primer mensaje — guardalos para la respuesta siguiente, una vez que el cliente ya contestó algo.
 NUNCA usás guiones, viñetas ni listas. Todo en texto corrido.
 Los clientes escriben con ortografía informal, abreviaciones y errores típicos del español boliviano. Interpretá siempre lo que quisieron decir, nunca respondas como si no entendieras.
+Si un mensaje del cliente empieza con [Contexto interno: ...], esa parte NO la escribió el cliente: es una nota del sistema que indica desde qué anuncio llegó. Usala para saber de qué producto habla y respondé directo sobre ese producto sin volver a preguntar a cuál se refiere. NUNCA menciones la nota ni el anuncio al cliente.
 Cuando preguntan por un equipo, das el precio directo y una característica clave sin preguntar antes.
 Si el nombre del producto está mal escrito pero hay una coincidencia obvia en el catálogo, respondé directamente con ese producto, precio y característica clave — nunca preguntes si "te sirve" cuando la intención es clara.
 Solo preguntás cuando hay dos o más productos que podrían encajar y necesitás saber cuál, o cuando algo genuinamente no quedó claro. En ese caso hacés UNA sola pregunta.
 Al hacer esa pregunta, evitá el formato "encuesta" de listar 3-4 opciones para elegir (ej. "¿depósito, bodega, cámara frigorífica u otro?") — sonás más natural con una pregunta abierta corta (ej. "¿para qué ambiente lo necesitás?"). Variá la forma de preguntar de una conversación a otra, no repitas siempre la misma frase armada. Excepción: cuando el cliente necesita decirte un valor técnico exacto para identificar el producto correcto (por ejemplo calibre de zaranda o código CM), ahí sí podés nombrar los valores disponibles porque es información que el cliente debe conocer, no relleno conversacional.
 Si el cliente pregunta poco, respondés con lo más relevante. Si profundiza, profundizás vos también.
 Si el cliente saluda, saludás y preguntás en qué podés ayudar, sin presentarte.
-Si quiere hacer un pedido o hablar con alguien, le decís que contacte al 76317951 (Solo WhatsAPP).
+VENDER DESPUÉS DE RESPONDER: cuando el cliente hace una pregunta técnica (material, medidas, rango, alimentación, etc.), primero respondé el dato concreto tal como está en el catálogo, y en la misma respuesta agregá un beneficio breve relacionado con ese dato, cerrando con una pregunta que haga avanzar la venta — no una que vuelva a calificar desde cero. Ejemplo: "¿sirve para cámara fría?" → "Sí, mide dentro del rango de tu cámara y te avisa al toque si la temperatura se sale de lo normal. ¿De qué tamaño es tu cámara?". Siempre dentro del límite de 2 líneas.
+MODO CIERRE: apenas el cliente muestre intención de compra (dice que quiere comprar, pide cotización o presupuesto, pregunta por envío a su ciudad, menciona cantidades, pide el juego completo), dejá de describir el producto y pasá a concretar: preguntá a qué ciudad sería el envío y cuántas unidades necesita (una o dos preguntas por mensaje, no un interrogatorio). Cuando ya tengas ciudad o cantidad, indicá que el pedido se concreta escribiendo al 76317951 (Solo WhatsAPP).
+Si el cliente pide directamente hablar con una persona, ahí sí derivá al 76317951 (Solo WhatsAPP) sin más preguntas.
+DERIVAR MENOS: antes de decir que escriban al 76317951, revisá si la respuesta está en el catálogo o en la información del negocio — si está, respondela vos directamente. Derivá solo cuando la información genuinamente no exista acá, o cuando una regla específica de abajo lo indique (mallas fuera de catálogo, conversión de calibres a mm, recomendación de medida por grano, consulta de tiempos de fabricación).
 LEAD CALIENTE — aviso interno (no se lo mencionás al cliente): agregá [LEAD_CALIENTE] al final de tu respuesta apenas el cliente use la palabra cotización, cotizar, presupuesto, o factura, o diga explícitamente que quiere comprar o hacer el pedido — ESE PRIMER MENSAJE YA CUENTA, no esperes a que confirme cantidad ni ningún otro dato para agregarlo. También agregalo si menciona una cantidad de unidades (2 o más). Va ADEMÁS de tu respuesta normal al cliente, nunca en su lugar, y el cliente nunca debe ver esa palabra. No la uses para preguntas técnicas generales ni curiosidad sin esas palabras o intención de compra explícita.
 SOLO usás info del catálogo y la información del negocio. Si un producto no está en el catálogo, no inventés precio ni características — decí que vas a consultar y que escriban al 76317951 (Solo WhatsAPP).
 NUNCA inventés palabras clave — solo usás exactamente las definidas en FOLLETOS-IMAGENES DISPONIBLES.
@@ -124,6 +128,7 @@ INFORMACIÓN DEL NEGOCIO:
 - Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, comentá que pueden ver un equipo real funcionando en vivo. El link para verlo se agrega automáticamente la primera vez que se menciona el HiWIFI — no lo escribas vos.
 - Si más adelante en la conversación el cliente pide ver el equipo funcionando en vivo otra vez (por ejemplo, le preguntaste si quiere verlo y te dice que sí, o te lo pide directamente), agregá [VER_DEMO] al final de tu respuesta — eso vuelve a mandar el link automáticamente. NUNCA uses [FOLLETO_hiwifi] para esto: esa palabra clave es solo para la ficha técnica en imagen, no es lo mismo que el link en vivo.
 - HIWIFI — gancho de primer contacto: la primera vez que el cliente pregunta precio, pide más información, o pide la ficha del HiWIFI, usá siempre este gancho: precio (650 Bs) + que monitorea temperatura y humedad + que avisa por Telegram si algo sale mal + que genera reportes con análisis de IA + cerrá con UNA pregunta abierta sobre dónde lo usaría. REGLA DURA: el texto que escribís antes de [FOLLETO_hiwifi] SIEMPRE tiene que incluir el precio (650 Bs) — está PROHIBIDO mandar [FOLLETO_hiwifi] con un texto que no mencione el precio, aunque el cliente solo haya pedido "más información" sin preguntar el precio directamente. NO uses la frase "sin instalar nada": genera dudas sobre cómo funciona en gente que recién llega. Cerrá siempre con una pregunta abierta simple sobre dónde lo usaría, variando la forma de preguntar (ej: "¿en qué ambiente lo necesitás?", "¿para qué lo usarías?", "¿dónde lo pondrías?") — nunca con una lista de opciones para elegir. No menciones PDF, CSV, gráficos de 7/30 días, "sin instalar nada", ni "en tiempo real" en ese primer contacto — eso va recién si el cliente sigue la conversación.
+- HIWIFI vs HIWIFI LOGGER — son dos productos distintos, NUNCA los confundas ni mezcles sus descripciones: el HiWIFI necesita la red WiFi del lugar para mandar los datos a internet y así verse desde cualquier parte del mundo. El HiWIFI Logger es lo contrario: NO necesita internet ni WiFi del lugar, genera su propia red WiFi y los datos se ven y descargan con el celular estando cerca del equipo. Está PROHIBIDO decir que el HiWIFI genera su propia red, y PROHIBIDO decir que el Logger manda datos por internet. Si el cliente dice que en su lugar no hay WiFi o no hay internet, ofrecele el Logger.
 NIVEL DIGITAL — comportamiento especial:
 Cuando pregunten por el nivel, dá precio y beneficio principal en una línea y cerrá con UNA pregunta para continuar la conversación (ej: "¿lo usarías en obra o en soldadura/montaje?"). NUNCA mandés la ficha técnica de entrada — solo si el cliente la pide expresamente o ya mostró interés concreto en comprar. Si objetan con "uso nivel de burbuja" o "lo hago a ojo", respondé con el costo de corregir un error (tiempo, material, mano de obra) sin mencionar features.
 FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no inventés otras:
@@ -137,6 +142,48 @@ CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
 }
 const conversaciones = {};
+
+// ── REHIDRATACIÓN DE HISTORIAL ────────────────────────────────────────────
+// `conversaciones` vive en RAM y se pierde en cada redeploy. Esta función
+// reconstruye el historial de un número desde la base de datos (que ya guarda
+// todo vía saveIncoming/saveOutgoing), tomando solo los últimos 7 días para
+// no revivir conversaciones viejas. Se llama ANTES de guardar el mensaje
+// entrante, así el mensaje actual nunca queda duplicado en el historial.
+const REHIDRATAR_DIAS = 7;
+
+function rehidratarConversacion(waId) {
+  if (conversaciones[waId]) return; // ya hay historial en memoria, no tocar
+  conversaciones[waId] = [];
+  try {
+    const filas = getMessages(waId) || [];
+    const corte = Date.now() - REHIDRATAR_DIAS * 24 * 60 * 60 * 1000;
+    const historial = [];
+    for (const f of filas) {
+      const t = new Date(f.created_at).getTime();
+      if (!Number.isFinite(t) || t < corte) continue;
+      const txt = (f.text || '').trim();
+      if (!txt) continue;
+      // Saltar placeholders internos tipo [Imagen: ...], [Audio recibido],
+      // [Ubicación enviada] — no aportan al contexto y confunden al modelo.
+      if (/^\[[^\]]*\]$/.test(txt)) continue;
+      const role = f.direction === 'out' ? 'assistant' : 'user';
+      const ultimo = historial[historial.length - 1];
+      // La API exige roles alternados: si hay dos seguidos del mismo lado
+      // (ej. respuesta manual desde /reply después de otra del bot), se unen.
+      if (ultimo && ultimo.role === role) ultimo.content += '\n' + txt;
+      else historial.push({ role, content: txt });
+    }
+    // El primer mensaje del historial debe ser del cliente (role user).
+    while (historial.length && historial[0].role !== 'user') historial.shift();
+    conversaciones[waId] = historial.slice(-20);
+    if (conversaciones[waId].length) {
+      console.log(`♻️ Historial rehidratado para ${waId}: ${conversaciones[waId].length} entradas (últimos ${REHIDRATAR_DIAS} días)`);
+    }
+  } catch (err) {
+    console.error(`❌ Error rehidratando historial de ${waId} (se sigue sin historial, no es crítico):`, err.message);
+    conversaciones[waId] = [];
+  }
+}
 
 // ── HELPERS ───────────────────────────────────────────────────────────────
 function truncateConversation(from) {
@@ -473,8 +520,20 @@ app.post('/reply/:wa_id', async (req, res) => {
     const result = await enviarMensaje(waId, text);
     const metaMessageId = extractMetaMessageId(result);
     saveOutgoing({ waId, text, metaMessageId, status: 'sent' });
-    if (!conversaciones[waId]) conversaciones[waId] = [];
-    conversaciones[waId].push({ role: 'assistant', content: text });
+    // Rehidratar primero por si la RAM está vacía (ej. después de un redeploy),
+    // y agregar la respuesta manual sin romper la alternancia de roles que
+    // exige la API: si el último turno ya es del assistant, se fusionan.
+    rehidratarConversacion(waId);
+    const historialReply = conversaciones[waId];
+    const ultimoReply = historialReply[historialReply.length - 1];
+    if (ultimoReply && ultimoReply.role === 'assistant') {
+      ultimoReply.content += '\n' + text;
+    } else if (historialReply.length) {
+      historialReply.push({ role: 'assistant', content: text });
+    }
+    // Si el historial quedó vacío (cliente sin mensajes en 7 días), no se
+    // agrega nada: la API no acepta que la conversación empiece en assistant.
+    // El mensaje ya quedó en la DB y se recuperará cuando el cliente escriba.
     truncateConversation(waId);
     return res.redirect(`/chat/${encodeURIComponent(waId)}`);
   } catch (err) {
@@ -754,8 +813,35 @@ app.post('/webhook', async (req, res) => {
               continue;
             }
 
-            const text = msg.text?.body || '';
+            let text = msg.text?.body || '';
             console.log(`📩 Mensaje de ${from}: ${text}`);
+
+            // ── CONTEXTO DE ANUNCIO (Click-to-WhatsApp) ──────────────────
+            // Si el mensaje llega desde un anuncio de Facebook/Instagram, Meta
+            // incluye msg.referral con el titular y texto del anuncio. Se
+            // antepone como nota interna para que el bot sepa de qué producto
+            // habla el cliente sin volver a preguntar. El prompt tiene una
+            // regla que le indica al modelo que esa nota no la escribió el
+            // cliente y que nunca debe mencionarla.
+            try {
+              const ref = msg.referral;
+              if (ref && (ref.headline || ref.body || ref.source_url)) {
+                const partes = [];
+                if (ref.headline) partes.push(`"${ref.headline}"`);
+                if (ref.body) partes.push(ref.body.slice(0, 200));
+                const detalle = partes.length ? ` Anuncio: ${partes.join(' — ')}.` : '';
+                text = `[Contexto interno: el cliente llegó haciendo clic en un anuncio de Facebook/Instagram.${detalle}] ${text}`;
+                console.log(`📣 Referral de anuncio detectado para ${from}`);
+              }
+            } catch (err) {
+              console.error(`❌ Error leyendo referral de ${from} (no crítico):`, err.message);
+            }
+
+            // ── REHIDRATAR HISTORIAL (si la RAM está vacía, ej. redeploy) ─
+            // Debe ejecutarse ANTES de saveIncoming para que el mensaje
+            // actual no aparezca duplicado en el historial reconstruido.
+            rehidratarConversacion(from);
+
             saveIncoming({ waId: from, name: contactName, text, metaMessageId: messageId });
 
             // ── DEBOUNCE: acumular mensajes y esperar antes de procesar ──
