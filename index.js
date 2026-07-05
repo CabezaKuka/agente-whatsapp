@@ -935,12 +935,12 @@ async function procesarMensajes(from) {
       if (reply.includes('[VER_DEMO]')) {
         reply = reply.replace('[VER_DEMO]', '').trim();
         marcarFlag(from, 'demo_link_enviado');
-        if (!reply.includes('hiwifi.app/p/HW1')) reply += `\n\n👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
+        if (!reply.includes('hiwifi.app/p/HW1')) reply += `\n\n👉 [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1?clave=demo)`;
       }
       const mencionaHiwifi = /hiwifi|higr[oó]metro/i.test(textoCombinado) || /hiwifi/i.test(reply);
       if (mencionaHiwifi && !tieneFlag(from, 'demo_link_enviado') && conversaciones[from].length > 2) {
         marcarFlag(from, 'demo_link_enviado');
-        if (!reply.includes('hiwifi.app/p/HW1')) reply += `\n\n👉 Mirá un equipo real funcionando: [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1)`;
+        if (!reply.includes('hiwifi.app/p/HW1')) reply += `\n\n👉 Mirá un equipo real funcionando: [HiWIFI · Datos públicos](https://hiwifi.app/p/HW1?clave=demo)`;
       }
     } catch (err) { console.error('❌ Error agregando link demo (no afecta el resto de la respuesta):', err.message); }
 
