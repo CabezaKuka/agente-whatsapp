@@ -71,7 +71,7 @@ const FOLLETOS = {
   mh5_2:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-2.png',
   zaranda:       'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/lista2.png',
   nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS1.png',
-  hiwifi:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaHiWIFI.png',
+  hiwifi:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaHiWIFI-1.png',
 };
 
 function buildSystemPrompt() {
