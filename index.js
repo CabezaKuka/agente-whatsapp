@@ -137,6 +137,7 @@ FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no invent
 - Zarandas manuales: [FOLLETO_ZARANDA]
 - Nivel: [FOLLETO_NIVEL]
 - HiWIFI: [FOLLETO_hiwifi]
+- HiWIFI Logger: [FOLLETO_logger]
 Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
 CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
@@ -977,6 +978,11 @@ async function procesarMensajes(from) {
       if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
       const r2 = await enviarImagen(from, FOLLETOS.hiwifi);
       saveOutgoing({ waId: from, text: '[Imagen: folleto hiwifi]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+    } else if (reply.includes('[FOLLETO_logger]')) {
+      const texto = reply.replace('[FOLLETO_logger]', '').trim();
+      if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+      const r2 = await enviarImagen(from, FOLLETOS.logger);
+      saveOutgoing({ waId: from, text: '[Imagen: folleto logger]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
     } else {
       const r = await enviarMensaje(from, reply);
       saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
