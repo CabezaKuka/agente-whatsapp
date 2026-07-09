@@ -896,9 +896,28 @@ app.post('/webhook', async (req, res) => {
                   const transcripcion = await transcribirAudio(audioMediaId);
                   console.log('📝 Transcripción: ' + transcripcion);
                   saveIncoming({ waId: from, name: contactName, text: '[Audio] ' + transcripcion, metaMessageId: messageId });
-                  // Reutilizar el flujo de texto con la transcripción
-                  msg = Object.assign({}, msg, { type: 'text', text: { body: transcripcion } });
-                  // NO hacer continue — seguir procesando como texto
+                  // Procesar la transcripción directamente como texto
+                  // (no reasignamos msg porque es const — usamos el texto directo)
+                  const textoAudio = transcripcion;
+
+                  if (!conversaciones[from]) conversaciones[from] = [];
+                  conversaciones[from].push({ role: 'user', content: textoAudio });
+                  truncateConversation(from);
+
+                  if (!pausados.has(from) && from !== NOTIFICAR_A) {
+                    if (!pendingMessages[from]) pendingMessages[from] = [];
+                    pendingMessages[from].push({ text: textoAudio, contactName, messageId });
+                    if (pendingTimers[from]) clearTimeout(pendingTimers[from]);
+                    pendingTimers[from] = setTimeout(() => {
+                      delete pendingTimers[from];
+                      procesarMensajes(from).catch(err =>
+                        console.error('❌ Error en debounce handler de ' + from + ':', err.message)
+                      );
+                    }, DEBOUNCE_MS);
+                  } else if (from === NOTIFICAR_A) {
+                    await procesarMensajes(from);
+                  }
+                  continue;
                 } catch (err) {
                   console.error('❌ Error transcribiendo audio:', err.message);
                   saveIncoming({ waId: from, name: contactName, text: '[Audio — error transcripción]', metaMessageId: messageId });
