@@ -146,6 +146,9 @@ ${getCatalogoTexto()}`;
 }
 const conversaciones = {};
 
+// ── CONTROL MANUAL — pausa bot por número ─────────────────────────────────
+const pausados = new Set(); // waIds pausados: bot guarda msgs pero no responde
+
 // ── REHIDRATACIÓN DE HISTORIAL ────────────────────────────────────────────
 // `conversaciones` vive en RAM y se pierde en cada redeploy. Esta función
 // reconstruye el historial de un número desde la base de datos (que ya guarda
@@ -562,6 +565,20 @@ app.post('/reply/:wa_id', async (req, res) => {
   }
 });
 
+// ── CONTROL MANUAL — pausar/reanudar bot por número ──────────────────────
+app.post('/admin/pausar/:wa_id', (req, res) => {
+  const waId = req.params.wa_id;
+  if (pausados.has(waId)) {
+    pausados.delete(waId);
+    res.json({ pausado: false });
+  } else {
+    pausados.add(waId);
+    if (pendingTimers[waId]) { clearTimeout(pendingTimers[waId]); delete pendingTimers[waId]; }
+    if (pendingMessages[waId]) delete pendingMessages[waId];
+    res.json({ pausado: true });
+  }
+});
+
 // ── ADMIN CATÁLOGO ────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => {
   const items = getCatalogo();
@@ -863,6 +880,12 @@ app.post('/webhook', async (req, res) => {
             rehidratarConversacion(from);
 
             saveIncoming({ waId: from, name: contactName, text, metaMessageId: messageId });
+
+            // ── CONTROL MANUAL: si el número está pausado, guardar y no responder ──
+            if (pausados.has(from)) {
+              console.log(`⏸️ Bot pausado para ${from} — mensaje guardado sin responder`);
+              continue;
+            }
 
             // ── DEBOUNCE: acumular mensajes y esperar antes de procesar ──
             // NOTIFICAR_A (el dueño) responde al instante siempre.
