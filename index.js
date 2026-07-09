@@ -18,6 +18,56 @@ const {
 
 const app = express();
 app.use(bodyParser.json());
+
+// ── WHISPER — transcripción de audios ─────────────────────────────────────
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+async function transcribirAudio(mediaId) {
+  // 1. Obtener URL de descarga del audio desde Meta
+  const metaRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}` }
+  });
+  const metaData = await metaRes.json();
+  if (!metaData.url) throw new Error('No se pudo obtener URL del audio');
+
+  // 2. Descargar el archivo de audio
+  const audioRes = await fetch(metaData.url, {
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}` }
+  });
+  if (!audioRes.ok) throw new Error('Error descargando audio');
+  const audioBuffer = await audioRes.arrayBuffer();
+
+  // 3. Preparar multipart form para Whisper manualmente
+  const boundary = '----WA' + Date.now().toString(16);
+  const audioBytes = Buffer.from(audioBuffer);
+  const header = Buffer.from(
+    '--' + boundary + '\r\n' +
+    'Content-Disposition: form-data; name="file"; filename="audio.ogg"\r\n' +
+    'Content-Type: audio/ogg\r\n\r\n'
+  );
+  const modelPart = Buffer.from(
+    '\r\n--' + boundary + '\r\n' +
+    'Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1' +
+    '\r\n--' + boundary + '\r\n' +
+    'Content-Disposition: form-data; name="language"\r\n\r\nes' +
+    '\r\n--' + boundary + '--\r\n'
+  );
+  const body = Buffer.concat([header, audioBytes, modelPart]);
+
+  // 4. Llamar a la API de Whisper
+  const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': body.length
+    },
+    body: body
+  });
+  const whisperData = await whisperRes.json();
+  if (!whisperData.text) throw new Error('Whisper no devolvió transcripción');
+  return whisperData.text.trim();
+}
 app.use(bodyParser.urlencoded({ extended: true }));
 
 initDb();
@@ -839,12 +889,31 @@ app.post('/webhook', async (req, res) => {
           // y el resto de los mensajes del lote no se ven afectados.
           try {
             if (msg.type === 'audio') {
-              saveIncoming({ waId: from, name: contactName, text: '[Audio recibido]', metaMessageId: messageId });
-              const replyText = 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊';
-              const result = await enviarMensaje(from, replyText);
-              saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
-              //await enviarMensaje(NOTIFICAR_A, `🎤 Audio recibido de +${from}`);
-              continue;
+              const audioMediaId = msg.audio?.id;
+              if (audioMediaId && OPENAI_API_KEY) {
+                try {
+                  console.log('🎤 Transcribiendo audio de ' + from + '...');
+                  const transcripcion = await transcribirAudio(audioMediaId);
+                  console.log('📝 Transcripción: ' + transcripcion);
+                  saveIncoming({ waId: from, name: contactName, text: '[Audio] ' + transcripcion, metaMessageId: messageId });
+                  // Reutilizar el flujo de texto con la transcripción
+                  msg = Object.assign({}, msg, { type: 'text', text: { body: transcripcion } });
+                  // NO hacer continue — seguir procesando como texto
+                } catch (err) {
+                  console.error('❌ Error transcribiendo audio:', err.message);
+                  saveIncoming({ waId: from, name: contactName, text: '[Audio — error transcripción]', metaMessageId: messageId });
+                  const replyText = 'No pude escuchar el audio. ¿Podés escribirme tu consulta?';
+                  const result = await enviarMensaje(from, replyText);
+                  saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
+                  continue;
+                }
+              } else {
+                saveIncoming({ waId: from, name: contactName, text: '[Audio recibido]', metaMessageId: messageId });
+                const replyText = 'En este momento no puedo escuchar audios. Escribime tu consulta y te respondo enseguida 😊';
+                const result = await enviarMensaje(from, replyText);
+                saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
+                continue;
+              }
             }
 
             if (msg.type !== 'text') {
