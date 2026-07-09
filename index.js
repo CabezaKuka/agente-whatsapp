@@ -504,12 +504,29 @@ app.get('/chat/:wa_id', (req, res) => {
   html += `
   </div>
   <div class="reply-box">
+    <button id="pausaBtn" class="pause-btn activo" onclick="togglePausa()">⏸️ Tomar control (pausar bot)</button>
     <form method="post" action="/reply/${encodeURIComponent(waId)}">
       <textarea name="text" rows="3" placeholder="Escribí una respuesta manual..."></textarea>
       <button type="submit">Enviar</button>
     </form>
   </div>
-  <script>window.scrollTo(0, document.body.scrollHeight);</script>
+  <script>
+    window.scrollTo(0, document.body.scrollHeight);
+    let botPausado = false;
+    async function togglePausa() {
+      const btn = document.getElementById('pausaBtn');
+      const res = await fetch('/admin/pausar/${escapeHtml(waId)}', {method:'POST'});
+      const data = await res.json();
+      botPausado = data.pausado;
+      if (botPausado) {
+        btn.textContent = '▶️ Devolver al bot (reanudar)';
+        btn.className = 'pause-btn pausado';
+      } else {
+        btn.textContent = '⏸️ Tomar control (pausar bot)';
+        btn.className = 'pause-btn activo';
+      }
+    }
+  </script>
 </body></html>`;
   res.send(html);
 });
