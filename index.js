@@ -904,7 +904,15 @@ app.post('/webhook', async (req, res) => {
                   conversaciones[from].push({ role: 'user', content: textoAudio });
                   truncateConversation(from);
 
-                  if (!pausados.has(from) && from !== NOTIFICAR_A) {
+                  if (pausados.has(from)) {
+                    // pausado — ya guardado, no responder
+                  } else if (from === NOTIFICAR_A) {
+                    // dueño — respuesta instantánea
+                    if (!pendingMessages[from]) pendingMessages[from] = [];
+                    pendingMessages[from].push({ text: textoAudio, contactName, messageId });
+                    await procesarMensajes(from);
+                  } else {
+                    // cliente normal — debounce
                     if (!pendingMessages[from]) pendingMessages[from] = [];
                     pendingMessages[from].push({ text: textoAudio, contactName, messageId });
                     if (pendingTimers[from]) clearTimeout(pendingTimers[from]);
@@ -914,8 +922,6 @@ app.post('/webhook', async (req, res) => {
                         console.error('❌ Error en debounce handler de ' + from + ':', err.message)
                       );
                     }, DEBOUNCE_MS);
-                  } else if (from === NOTIFICAR_A) {
-                    await procesarMensajes(from);
                   }
                   continue;
                 } catch (err) {
