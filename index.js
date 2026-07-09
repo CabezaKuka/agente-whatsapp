@@ -436,6 +436,7 @@ app.get('/admin/exportar', (req, res) => {
 // ── CHAT INDIVIDUAL ───────────────────────────────────────────────────────
 app.get('/chat/:wa_id', (req, res) => {
   const waId = req.params.wa_id;
+  const estaPausado = pausados.has(waId);
   const messages = getMessages(waId);
   const grupos = {};
   for (const msg of messages) {
@@ -507,7 +508,7 @@ app.get('/chat/:wa_id', (req, res) => {
   html += `
   </div>
   <div class="reply-box">
-    <button id="pausaBtn" class="pause-btn activo" onclick="togglePausa()">⏸️ Tomar control (pausar bot)</button>
+    <button id="pausaBtn" class="pause-btn ${estaPausado ? 'pausado' : 'activo'}" onclick="togglePausa()">${estaPausado ? '▶️ Devolver al bot (reanudar)' : '⏸️ Tomar control (pausar bot)'}</button>
     <form method="post" action="/reply/${encodeURIComponent(waId)}">
       <textarea name="text" rows="3" placeholder="Escribí una respuesta manual..."></textarea>
       <button type="submit">Enviar</button>
@@ -515,7 +516,7 @@ app.get('/chat/:wa_id', (req, res) => {
   </div>
   <script>
     window.scrollTo(0, document.body.scrollHeight);
-    let botPausado = false;
+    let botPausado = ${estaPausado ? 'true' : 'false'};
     async function togglePausa() {
       const btn = document.getElementById('pausaBtn');
       const res = await fetch('/admin/pausar/${escapeHtml(waId)}', {method:'POST'});
