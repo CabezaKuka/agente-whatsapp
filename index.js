@@ -371,6 +371,8 @@ app.get('/inbox', (req, res) => {
           <option value="2">Últimos 2 días</option>
           <option value="3" selected>Últimos 3 días</option>
           <option value="7">Última semana</option>
+          <option value="14">Últimas 2 semanas</option>
+          <option value="30">Último mes</option>
         </select>
         <button type="submit">📥 Exportar</button>
       </form>
@@ -433,7 +435,7 @@ app.get('/inbox', (req, res) => {
 app.get('/admin/exportar', (req, res) => {
   let dias = parseInt(req.query.dias, 10);
   if (!Number.isFinite(dias) || dias < 1) dias = 3;
-  if (dias > 30) dias = 30;
+  if (dias > 90) dias = 90;
 
   const sinceIso = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
   const filas = getMessagesDesde(sinceIso);
