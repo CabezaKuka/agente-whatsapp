@@ -99,7 +99,15 @@ function updateStatus(metaMessageId, status) {
 
 function getChats() {
   return db.prepare(`
-    SELECT wa_id, name, last_message_at FROM contacts ORDER BY last_message_at DESC
+    SELECT c.wa_id, c.name, c.last_message_at,
+           m.direction AS last_direction
+    FROM contacts c
+    LEFT JOIN (
+      SELECT wa_id, direction
+      FROM messages
+      WHERE id IN (SELECT MAX(id) FROM messages GROUP BY wa_id)
+    ) m ON m.wa_id = c.wa_id
+    ORDER BY c.last_message_at DESC
   `).all();
 }
 

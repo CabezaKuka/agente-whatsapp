@@ -351,6 +351,9 @@ app.get('/inbox', (req, res) => {
     .chat-name{font-weight:600;font-size:14px;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .chat-id{font-size:12px;color:#888}
     .chat-time{font-size:11px;color:#aaa;white-space:nowrap}
+    .chat-row.sin-respuesta{background:#fff8e1;border-left:4px solid #ff9800}
+    .chat-row.sin-respuesta:hover{background:#fff3cd}
+    .sin-respuesta .chat-name{color:#e65100}
     .empty{text-align:center;padding:40px;color:#aaa;background:#fff;border-radius:10px}
     .export-form{display:flex;align-items:center;gap:6px}
     .export-form select{border:none;border-radius:6px;padding:6px 8px;font-size:12px;background:rgba(255,255,255,.9);color:#075e54;font-weight:600}
@@ -404,13 +407,13 @@ app.get('/inbox', (req, res) => {
         const inicial = nombre.charAt(0).toUpperCase();
         const { hora } = toGMTMinus4(chat.last_message_at);
         html += `
-        <a class="chat-row" href="/chat/${encodeURIComponent(chat.wa_id)}">
+        <a class="chat-row${chat.last_direction === 'in' ? ' sin-respuesta' : ''}" href="/chat/${encodeURIComponent(chat.wa_id)}">
           <div class="avatar">${escapeHtml(inicial)}</div>
           <div class="chat-info">
             <div class="chat-name">${escapeHtml(nombre)}</div>
             <div class="chat-id">+${escapeHtml(chat.wa_id)}</div>
           </div>
-          <div class="chat-time">${escapeHtml(hora)}</div>
+          <div class="chat-time">${chat.last_direction === 'in' ? '🔴 ' : ''}${escapeHtml(hora)}</div>
         </a>`;
       }
       html += `</div></div>`;
@@ -426,6 +429,8 @@ app.get('/inbox', (req, res) => {
       const open = body.classList.toggle('open');
       arr.classList.toggle('open', open);
     }
+    // Auto-refresh cada 5 minutos
+    setTimeout(() => location.reload(), 5 * 60 * 1000);
   </script>
 </body></html>`;
   res.send(html);
