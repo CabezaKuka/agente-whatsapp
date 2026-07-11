@@ -411,13 +411,13 @@ app.get('/inbox', (req, res) => {
         const inicial = nombre.charAt(0).toUpperCase();
         const { hora } = toGMTMinus4(chat.last_message_at);
         html += `
-        <a class="chat-row${pausados.has(chat.wa_id) ? ' pausado' : (chat.last_direction === 'in' ? ' sin-respuesta' : '')}" href="/chat/${encodeURIComponent(chat.wa_id)}">
+        <a class="chat-row${pausados.has(chat.wa_id) ? ' pausado' : ''}${!pausados.has(chat.wa_id) && chat.last_direction === 'in' ? ' sin-respuesta' : ''}" href="/chat/${encodeURIComponent(chat.wa_id)}">
           <div class="avatar">${escapeHtml(inicial)}</div>
           <div class="chat-info">
             <div class="chat-name">${escapeHtml(nombre)}${pausados.has(chat.wa_id) ? '<span class="badge-pausado">⏸ Vos</span>' : ''}</div>
             <div class="chat-id">+${escapeHtml(chat.wa_id)}</div>
           </div>
-          <div class="chat-time">${pausados.has(chat.wa_id) ? '⏸️ ' : (chat.last_direction === 'in' ? '🔴 ' : '')}${escapeHtml(hora)}</div>
+          <div class="chat-time">${pausados.has(chat.wa_id) && chat.last_direction === 'in' ? '⏸️🔴 ' : pausados.has(chat.wa_id) ? '⏸️ ' : chat.last_direction === 'in' ? '🔴 ' : ''}${escapeHtml(hora)}</div>
         </a>`;
       }
       html += `</div></div>`;
