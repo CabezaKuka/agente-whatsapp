@@ -354,6 +354,10 @@ app.get('/inbox', (req, res) => {
     .chat-row.sin-respuesta{background:#fff8e1;border-left:4px solid #ff9800}
     .chat-row.sin-respuesta:hover{background:#fff3cd}
     .sin-respuesta .chat-name{color:#e65100}
+    .chat-row.pausado{background:#e8f0fe;border-left:4px solid #1a73e8}
+    .chat-row.pausado:hover{background:#d2e3fc}
+    .pausado .chat-name{color:#1a73e8}
+    .badge-pausado{font-size:10px;background:#1a73e8;color:#fff;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600}
     .empty{text-align:center;padding:40px;color:#aaa;background:#fff;border-radius:10px}
     .export-form{display:flex;align-items:center;gap:6px}
     .export-form select{border:none;border-radius:6px;padding:6px 8px;font-size:12px;background:rgba(255,255,255,.9);color:#075e54;font-weight:600}
@@ -407,13 +411,13 @@ app.get('/inbox', (req, res) => {
         const inicial = nombre.charAt(0).toUpperCase();
         const { hora } = toGMTMinus4(chat.last_message_at);
         html += `
-        <a class="chat-row${chat.last_direction === 'in' ? ' sin-respuesta' : ''}" href="/chat/${encodeURIComponent(chat.wa_id)}">
+        <a class="chat-row${pausados.has(chat.wa_id) ? ' pausado' : (chat.last_direction === 'in' ? ' sin-respuesta' : '')}" href="/chat/${encodeURIComponent(chat.wa_id)}">
           <div class="avatar">${escapeHtml(inicial)}</div>
           <div class="chat-info">
-            <div class="chat-name">${escapeHtml(nombre)}</div>
+            <div class="chat-name">${escapeHtml(nombre)}${pausados.has(chat.wa_id) ? '<span class="badge-pausado">⏸ Vos</span>' : ''}</div>
             <div class="chat-id">+${escapeHtml(chat.wa_id)}</div>
           </div>
-          <div class="chat-time">${chat.last_direction === 'in' ? '🔴 ' : ''}${escapeHtml(hora)}</div>
+          <div class="chat-time">${pausados.has(chat.wa_id) ? '⏸️ ' : (chat.last_direction === 'in' ? '🔴 ' : '')}${escapeHtml(hora)}</div>
         </a>`;
       }
       html += `</div></div>`;
