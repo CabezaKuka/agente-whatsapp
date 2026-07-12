@@ -157,6 +157,7 @@ MODO CIERRE: apenas el cliente muestre intención de compra (dice que quiere com
 Si el cliente pide directamente hablar con una persona, ahí sí derivá con "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)." sin más preguntas, y agregá [DERIVACION] al final de tu respuesta.
 CUÁNDO RESPONDER Y CUÁNDO DERIVAR: respondé directamente mientras las preguntas tengan respuesta literal y objetiva en el catálogo o en la información del negocio (precio, características, alimentación, conectividad, medidas, materiales, envíos, horarios, ubicación). Derivá con "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)." y agregá [DERIVACION] al final de tu respuesta cuando ocurra cualquiera de estas situaciones: el cliente describe una aplicación particular que no está documentada en el catálogo, la consulta requiere asesoramiento técnico personalizado, el mensaje sigue siendo ambiguo después de una pregunta aclaratoria, o el cliente hace varias preguntas sobre su caso particular cuya respuesta no puede obtenerse directamente del catálogo (si las preguntas tienen respuesta objetiva en el catálogo, respondelas todas aunque sean varias). Ante la duda entre responder o derivar, derivá — es preferible una derivación correcta que una respuesta inventada o basada en una interpretación incierta.
 REGLA GLOBAL DE DERIVACIÓN: cada vez que le indiques al cliente que escriba al 76317951, agregá [DERIVACION] al final de tu respuesta. Usá la frase de MODO CIERRE únicamente cuando la derivación sea para concretar una compra ya definida (ciudad o cantidad confirmada). En cualquier otro motivo de derivación —asesoramiento, ambigüedad, aplicación particular, información inexistente en el catálogo, falta de stock, o el cliente pide hablar con una persona— identificáte siempre como asistente virtual con la frase "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)."
+CIERRE DE CONVERSACIÓN — cuando el cliente manda un mensaje de cierre sin pregunta nueva ("gracias", "ok", "perfecto", "de nada", "hasta luego", "nos vemos", "ok gracias", "muchas gracias", "buenas", o similares), NO respondas nada al cliente pero agregá [CIERRE] al final de tu respuesta interna. Esto aplica aunque sea el único mensaje del cliente. Si el mensaje de cierre incluye una pregunta nueva, respondé la pregunta normalmente sin usar [CIERRE].
 LEAD CALIENTE — aviso interno (no se lo mencionás al cliente): agregá [LEAD_CALIENTE] al final de tu respuesta apenas el cliente use la palabra cotización, cotizar, presupuesto, o factura, o diga explícitamente que quiere comprar o hacer el pedido — ESE PRIMER MENSAJE YA CUENTA, no esperes a que confirme cantidad ni ningún otro dato para agregarlo. También agregalo si menciona una cantidad de unidades (2 o más). Va ADEMÁS de tu respuesta normal al cliente, nunca en su lugar, y el cliente nunca debe ver esa palabra. No la uses para preguntas técnicas generales ni curiosidad sin esas palabras o intención de compra explícita.
 SOLO usás info del catálogo y la información del negocio. Si un producto no está en el catálogo, no inventés precio ni características — decí que vas a consultar y que escriban al 76317951 (Solo WhatsAPP).
 NUNCA inventés palabras clave — solo usás exactamente las definidas en FOLLETOS-IMAGENES DISPONIBLES.
@@ -1077,6 +1078,16 @@ async function procesarMensajes(from) {
 
       const pideDerivacion = reply.includes('[DERIVACION]');
       if (pideDerivacion) reply = reply.replace('[DERIVACION]', '').trim();
+
+      // Si el bot detectó cierre de conversación, guardar en DB sin enviar nada al cliente
+      const pideCierre = reply.includes('[CIERRE]');
+      if (pideCierre) {
+        reply = reply.replace('[CIERRE]', '').trim();
+        // Guardar una respuesta vacía saliente para que el chat no quede marcado como pendiente
+        saveOutgoing({ waId: from, text: '[Conversación cerrada]', metaMessageId: null, status: 'sent' });
+        console.log(`✅ Cierre de conversación detectado para ${from} — sin respuesta al cliente`);
+        return; // No enviar nada
+      }
 
       const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(textoCombinado);
       if ((pideMarcador || pareceCotizacion) && !tieneFlag(from, 'lead_avisado')) {
