@@ -123,6 +123,7 @@ const FOLLETOS = {
   nivel:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/folletoAXIS1.png',
   hiwifi:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaHiWIFI-1.png',
   logger:        'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaLOGGER.png',
+  cold:          'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaCOLD.png',
 };
 
 function buildSystemPrompt() {
@@ -180,7 +181,6 @@ INFORMACIÓN DEL NEGOCIO:
 - Si preguntan por humedad de granos o semillas contestas con el MH-5, si es para ambientes, depositos, almacenes, centros de datos contestas con HIWIFI.
 - Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, comentá que pueden ver un equipo real funcionando en vivo. El link para verlo se agrega automáticamente la primera vez que se menciona el HiWIFI — no lo escribas vos.
 - Si más adelante en la conversación el cliente pide ver el equipo funcionando en vivo otra vez (por ejemplo, le preguntaste si quiere verlo y te dice que sí, o te lo pide directamente), agregá [VER_DEMO] al final de tu respuesta — eso vuelve a mandar el link automáticamente. NUNCA uses [FOLLETO_hiwifi] para esto: esa palabra clave es solo para la ficha técnica en imagen, no es lo mismo que el link en vivo.
-- ANUNCIO MULTI-PRODUCTO — cuando el contexto interno del anuncio mencione los tres dispositivos, o el cliente llegue con un mensaje genérico como "quiero información sobre los monitores", "información de los dispositivos", "quiero saber de todos" o similar sin especificar uno solo, usá siempre este gancho que presenta los tres: "Hola 👋 Tenemos tres dispositivos de monitoreo de temperatura y humedad:\n\n📡 *HiWIFI Monitor Ambiental* — mide en tiempo real y avisa por Telegram si algo sale de rango. 650 Bs.\n\n🌡️ *Cold WiFi* — monitoreo con sonda externa para interior de heladeras y cámaras frías. 700 Bs.\n\n💾 *Datalogger* — registra y guarda el historial en el propio equipo, sin internet. 495 Bs.\n\n¿Cuál le interesa o tiene alguna consulta?" — después de este mensaje respondé según el producto que el cliente elija usando las reglas específicas de cada uno.
 - HIWIFI — gancho de primer contacto: distinguí entre dos casos. CASO 1 — el primer mensaje es el saludo genérico del anuncio (variantes como "¡Hola! Quiero más información sobre HiWIFI", "info", "buenos días me interesa", "quiero saber más", o cualquier mensaje sin pregunta concreta): usá siempre este gancho: "Hola 👋 HiWIFI es un monitor ambiental que mide temperatura y humedad en tiempo real y avisa por Telegram si algo sale del rango. Se conecta al WiFi del lugar y ves todo desde cualquier navegador, sin instalar nada. El equipo cuesta 650 Bs. ¿En qué ambiente lo usaría?" CASO 2 — el primer mensaje ya contiene una pregunta concreta (sobre precio, funcionamiento, compatibilidad, envío, instalación, etc.): respondé directamente esa pregunta incluyendo el precio (650 Bs) en la misma respuesta, sin usar el gancho estándar. REGLA DURA: el texto que escribís antes de [FOLLETO_hiwifi] SIEMPRE tiene que incluir el precio (650 Bs). NO uses la frase "sin instalar nada" fuera del gancho. No menciones Telegram, PDF, CSV, IA ni gráficos de 7/30 días en el primer contacto salvo que el cliente los pregunte explícitamente.
 - HIWIFI vs HIWIFI LOGGER — son dos productos distintos, NUNCA los confundas ni mezcles sus descripciones: el HiWIFI necesita la red WiFi del lugar para mandar los datos a internet y así verse desde cualquier parte del mundo. El HiWIFI Logger es lo contrario: NO necesita internet ni WiFi del lugar, genera su propia red WiFi y los datos se ven y descargan con el celular estando cerca del equipo. Está PROHIBIDO decir que el HiWIFI genera su propia red, y PROHIBIDO decir que el Logger manda datos por internet. Si el cliente dice que en su lugar no hay WiFi o no hay internet, ofrecele el Logger.
 - LOGGER — gancho de primer contacto: distinguí entre dos casos. CASO 1 — el primer mensaje es el saludo genérico del anuncio (variantes como "¡Hola! Quiero más información del Logger", "info", "me interesa", o cualquier mensaje sin pregunta concreta): usá siempre este gancho: "Hola 👋 El Datalogger registra temperatura y humedad y guarda todo en el propio equipo. Para ver los datos, acercás el celular y los descargás directo — sin internet, sin aplicaciones. El equipo cuesta 495 Bs. ¿Dónde lo usaría?" CASO 2 — el primer mensaje ya contiene una pregunta concreta (sobre precio, funcionamiento, autonomía, descarga de datos, etc.): respondé directamente esa pregunta incluyendo el precio (495 Bs) en la misma respuesta, sin usar el gancho estándar. REGLA DURA: el texto que escribís antes de [FOLLETO_logger] SIEMPRE tiene que incluir el precio (495 Bs). No menciones detalles técnicos adicionales en el primer contacto salvo que el cliente los pregunte explícitamente.
@@ -193,6 +193,7 @@ FOLLETOS-IMAGENES DISPONIBLES — solo estas 4 palabras clave existen, no invent
 - Nivel: [FOLLETO_NIVEL]
 - HiWIFI: [FOLLETO_hiwifi]
 - HiWIFI Logger: [FOLLETO_logger]
+- HiWIFI Cold WiFi: [FOLLETO_cold]
 Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
 CATÁLOGO DE EQUIPOS:
 ${getCatalogoTexto()}`;
@@ -1161,6 +1162,11 @@ async function procesarMensajes(from) {
       if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
       const r2 = await enviarImagen(from, FOLLETOS.logger);
       saveOutgoing({ waId: from, text: '[Imagen: folleto logger]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
+    } else if (reply.includes('[FOLLETO_cold]')) {
+      const texto = reply.replace('[FOLLETO_cold]', '').trim();
+      if (texto) { const r = await enviarMensaje(from, texto); saveOutgoing({ waId: from, text: texto, metaMessageId: extractMetaMessageId(r), status: 'sent' }); }
+      const r2 = await enviarImagen(from, FOLLETOS.cold);
+      saveOutgoing({ waId: from, text: '[Imagen: folleto cold wifi]', metaMessageId: extractMetaMessageId(r2), status: 'sent' });
     } else {
       const r = await enviarMensaje(from, reply);
       saveOutgoing({ waId: from, text: reply, metaMessageId: extractMetaMessageId(r), status: 'sent' });
