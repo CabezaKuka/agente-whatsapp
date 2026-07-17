@@ -181,6 +181,7 @@ INFORMACIÓN DEL NEGOCIO:
 - Si preguntan por humedad de granos o semillas contestas con el MH-5, si es para ambientes, depositos, almacenes, centros de datos contestas con HIWIFI.
 - Si preguntan específicamente por el higrómetro wifi, el HiWIFI, o cómo ver los datos en vivo, comentá que pueden ver un equipo real funcionando en vivo. El link para verlo se agrega automáticamente la primera vez que se menciona el HiWIFI — no lo escribas vos.
 - Si más adelante en la conversación el cliente pide ver el equipo funcionando en vivo otra vez (por ejemplo, le preguntaste si quiere verlo y te dice que sí, o te lo pide directamente), agregá [VER_DEMO] al final de tu respuesta — eso vuelve a mandar el link automáticamente. NUNCA uses [FOLLETO_hiwifi] para esto: esa palabra clave es solo para la ficha técnica en imagen, no es lo mismo que el link en vivo.
+- REGLA GLOBAL DE GANCHOS — los ganchos de primer contacto (plataforma, multi-producto, HiWIFI, Logger) se usan UNA sola vez por conversación. Si el cliente repite el mismo mensaje del anuncio, vuelve a pedir "más información" de lo mismo, o pregunta algo que ya respondiste, NUNCA repitas el gancho ni el bloque completo — respondé en una línea confirmando que la info está arriba y avanzá con una pregunta que haga progresar la venta (ej: "Te pasé la info justo arriba 🙂 ¿quedó alguna duda?"). Esto tiene prioridad sobre cualquier regla que diga "usá siempre este gancho".
 - ANUNCIO PLATAFORMA HIWIFI.APP — cuando el contexto del anuncio mencione "hiwifi.app", "la plataforma", "plataforma hiwifi" o el cliente pida más información sobre la plataforma, usá siempre este gancho: "Hola 👋 hiwifi.app es la plataforma donde ves temperatura y humedad en tiempo real, recibís alertas por Telegram si algo sale de rango y generás reportes con análisis de IA automáticamente.\n\n👉 Mirá cómo se ve en vivo: https://hiwifi.app/p/HW1?clave=demo\n\nPara acceder necesitás uno de nuestros sensores:\n\n📡 *HiWIFI* — temperatura y humedad ambiente. 650 Bs.\n\n🌡️ *ColdWiFi* — temperatura para heladeras y cámaras frigoríficas con sonda. 700 Bs.\n\n¿Para qué ambiente lo necesitás?"
 - ANUNCIO MULTI-PRODUCTO — cuando el cliente pida más información sobre "monitores ambientales", "monitores de temperatura", "los monitores" o cualquier variante que no especifique un producto concreto, usá siempre este gancho que presenta los tres: "Hola 👋 Tenemos tres dispositivos de monitoreo de temperatura y humedad:\n\n📡 *HiWIFI Monitor Ambiental* — mide en tiempo real y avisa por Telegram si algo sale de rango. 650 Bs.\n\n🌡️ *Cold WiFi* — monitoreo con sonda externa para interior de heladeras y cámaras frías. 700 Bs.\n\n💾 *Datalogger* — registra y guarda el historial en el propio equipo, sin internet. 495 Bs.\n\n¿Cuál le interesa o tiene alguna consulta?" — después respondé según el producto que el cliente elija usando las reglas específicas de cada uno.
 - HIWIFI — gancho de primer contacto: distinguí entre dos casos. CASO 1 — el primer mensaje es el saludo genérico del anuncio (variantes como "¡Hola! Quiero más información sobre HiWIFI", "info", "buenos días me interesa", "quiero saber más", o cualquier mensaje sin pregunta concreta): usá siempre este gancho: "Hola 👋 HiWIFI es un monitor ambiental que mide temperatura y humedad en tiempo real y avisa por Telegram si algo sale del rango. Se conecta al WiFi del lugar y ves todo desde cualquier navegador, sin instalar nada. El equipo cuesta 650 Bs. ¿En qué ambiente lo usaría?" CASO 2 — el primer mensaje ya contiene una pregunta concreta (sobre precio, funcionamiento, compatibilidad, envío, instalación, etc.): respondé directamente esa pregunta incluyendo el precio (650 Bs) en la misma respuesta, sin usar el gancho estándar. REGLA DURA: el texto que escribís antes de [FOLLETO_hiwifi] SIEMPRE tiene que incluir el precio (650 Bs). NO uses la frase "sin instalar nada" fuera del gancho. No menciones Telegram, PDF, CSV, IA ni gráficos de 7/30 días en el primer contacto salvo que el cliente los pregunte explícitamente.
@@ -1049,6 +1050,25 @@ const DEBOUNCE_MS = 2 * 60 * 1000; // 2 minutos
 const pendingTimers   = {}; // { waId: timeoutId }
 const pendingMessages = {}; // { waId: [{ text, contactName, messageId }] }
 
+// ── ANTI-REPETICIÓN ──────────────────────────────────────────────────────
+// Si el cliente manda exactamente el mismo mensaje que ya le respondimos
+// (típico: tocó dos veces el botón del anuncio y llega el prefill duplicado),
+// no volvemos a llamar a Claude ni repetimos el gancho — respondemos corto.
+// La normalización quita el prefijo [Contexto interno...] del referral,
+// tildes, mayúsculas, puntuación y espacios extra para que "Mas informacion"
+// y "más información" matcheen.
+function normalizarParaComparar(txt) {
+  return (txt || '')
+    .replace(/^\[Contexto interno:[^\]]*\]\s*/i, '') // quitar nota de referral
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quitar tildes
+    .replace(/[¡!¿?.,;:]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const RESPUESTA_REPETIDO = 'Te pasé la info justo arriba 🙂 ¿Quedó alguna duda o querés que te cuente algo más específico?';
+
 async function procesarMensajes(from) {
   const lote = pendingMessages[from] || [];
   delete pendingMessages[from];
@@ -1060,6 +1080,28 @@ async function procesarMensajes(from) {
 
   try {
     if (!conversaciones[from]) conversaciones[from] = [];
+
+    // ── ANTI-REPETICIÓN: mismo mensaje que el anterior, ya respondido ──
+    // Solo aplica si el último turno del historial es del asistente (o sea,
+    // el mensaje anterior ya fue respondido) y el texto normalizado coincide.
+    const hist = conversaciones[from];
+    if (hist.length >= 2 && hist[hist.length - 1].role === 'assistant') {
+      const ultimoUser = [...hist].reverse().find(m => m.role === 'user');
+      const normActual = normalizarParaComparar(textoCombinado);
+      if (
+        ultimoUser &&
+        normActual.length > 0 &&
+        normActual === normalizarParaComparar(ultimoUser.content)
+      ) {
+        console.log(`🔁 Mensaje repetido de ${from} — respuesta corta sin llamar al modelo`);
+        conversaciones[from].push({ role: 'user', content: textoCombinado });
+        conversaciones[from].push({ role: 'assistant', content: RESPUESTA_REPETIDO });
+        truncateConversation(from);
+        const result = await enviarMensaje(from, RESPUESTA_REPETIDO);
+        saveOutgoing({ waId: from, text: RESPUESTA_REPETIDO, metaMessageId: extractMetaMessageId(result), status: 'sent' });
+        return;
+      }
+    }
     conversaciones[from].push({ role: 'user', content: textoCombinado });
     truncateConversation(from);
 
