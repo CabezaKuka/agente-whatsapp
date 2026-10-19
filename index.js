@@ -1073,6 +1073,7 @@ function normalizarParaComparar(txt) {
     .trim();
 }
 
+const GANCHO_TERMOMETRO = 'Hola 👋 El *TempWIFI* registra la temperatura todo el día y te avisa al celular si se sale de rango, sin anotar nada a mano. Cuesta 600 Bs.\n\nSi además necesitás medir humedad, está el *HiWIFI* (650 Bs), y para heladeras o cámaras frías el *ColdWiFi* con sonda (700 Bs).\n\n¿Dónde lo vas a usar?';
 const RESPUESTA_REPETIDO = 'Te pasé la info justo arriba 🙂 ¿Quedó alguna duda o querés que te cuente algo más específico?';
 
 async function procesarMensajes(from) {
@@ -1108,6 +1109,30 @@ async function procesarMensajes(from) {
         return;
       }
     }
+    // ── GANCHO FIJO: anuncio "Termómetro WiFi" (antes/después) ─────────
+    // Se responde por código, sin llamar al modelo, para que el primer
+    // mensaje sea siempre el mismo (el modelo tendía a usar el gancho
+    // TEMPWIFI por la regla de "máximo 2 líneas"). Solo se usa una vez por
+    // número y solo si el cliente no hizo una pregunta concreta; si pregunta
+    // algo, sigue el flujo normal con el modelo.
+    try {
+      const textoCliente = textoCombinado.replace(/^\[Contexto interno:[^\]]*\]\s*/i, '').trim();
+      const vieneDelAnuncio = /term[oó]metro\s*wi-?fi|anotando la temperatura a mano/i.test(textoCombinado);
+      const esSaludoGenerico = !textoCliente.includes('?') && textoCliente.length <= 80;
+      if (vieneDelAnuncio && esSaludoGenerico && !tieneFlag(from, 'gancho_termometro')) {
+        marcarFlag(from, 'gancho_termometro');
+        console.log(`🌡️ Gancho fijo Termómetro WiFi para ${from}`);
+        conversaciones[from].push({ role: 'user', content: textoCombinado });
+        conversaciones[from].push({ role: 'assistant', content: GANCHO_TERMOMETRO });
+        truncateConversation(from);
+        const result = await enviarMensaje(from, GANCHO_TERMOMETRO);
+        saveOutgoing({ waId: from, text: GANCHO_TERMOMETRO, metaMessageId: extractMetaMessageId(result), status: 'sent' });
+        return;
+      }
+    } catch (err) {
+      console.error(`❌ Error en gancho Termómetro WiFi de ${from} (sigue flujo normal):`, err.message);
+    }
+
     conversaciones[from].push({ role: 'user', content: textoCombinado });
     truncateConversation(from);
 
