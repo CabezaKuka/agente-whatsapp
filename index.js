@@ -1034,7 +1034,7 @@ app.post('/webhook', async (req, res) => {
           } catch (err) {
             console.error(`❌ Error procesando mensaje de ${from}:`, err.message);
             try {
-              const fallback = 'Disculpá, tuve un problema técnico procesando tu mensaje. ¿Podés escribirlo de nuevo?';
+              const fallback = 'Disculpá, soy un asistente vitrual, tuve un problema técnico procesando tu mensaje. ¿Podés escribir al 76317951?. Gracias';
               const r = await enviarMensaje(from, fallback);
               saveOutgoing({ waId: from, text: fallback, metaMessageId: extractMetaMessageId(r), status: 'sent' });
             } catch (err2) {
