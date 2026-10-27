@@ -14,7 +14,12 @@ const {
   updateProducto,
   insertProducto,
   deleteProducto,
+  insertLicencia,
+  getLicencia,
+  buscarLicencias,
+  contarLicencias,
 } = require('./db');
+const lic = require('./licencias');
 
 const app = express();
 app.use(bodyParser.json());
@@ -1003,6 +1008,13 @@ app.post('/webhook', async (req, res) => {
             let text = msg.text?.body || '';
             console.log(`📩 Mensaje de ${from}: ${text}`);
 
+            // ── COMANDOS DE CLAVES optiMAX (solo desde el número del dueño) ──
+            // No pasan por el modelo ni se guardan en el historial del chat.
+            if (from === NOTIFICAR_A && /^\/claves?(\s|$)/i.test(text.trim())) {
+              await manejarComandoClave(text.trim());
+              continue;
+            }
+
             // ── CONTEXTO DE ANUNCIO (Click-to-WhatsApp) ──────────────────
             // Si el mensaje llega desde un anuncio de Facebook/Instagram, Meta
             // incluye msg.referral con el titular y texto del anuncio. Se
@@ -1302,6 +1314,65 @@ async function procesarMensajes(from) {
     } catch (err2) {
       console.error(`❌ Error mandando el aviso de fallback a ${from}:`, err2.message);
     }
+  }
+}
+
+// ── CLAVES optiMAX POR WHATSAPP ──────────────────────────────────────────
+// /clave Nombre del cliente 7K3Q-WXPM-2HDA  → genera (o reenvía) la clave
+//   El nombre es la primera línea sin el código; el código se busca en todo
+//   el texto, así que se puede pegar debajo el mensaje entero del cliente.
+// /claves [texto]  → busca ventas por cliente o código (vacío = últimas 10)
+const AYUDA_CLAVE = 'Uso:\n/clave Nombre del cliente 7K3Q-WXPM-2HDA\n/claves juan (buscar ventas)\n/claves (últimas 10)';
+
+function fechaCorta(iso) {
+  const { fecha, hora } = toGMTMinus4(iso);
+  const [y, m, d] = fecha.split('-');
+  return `${d}/${m}/${y} ${hora}`;
+}
+
+async function manejarComandoClave(texto) {
+  const responder = async (t) => {
+    try { await enviarMensaje(NOTIFICAR_A, t); }
+    catch (err) { console.error('❌ Error respondiendo comando de clave:', err.message); }
+  };
+  try {
+    const m = texto.match(/^\/(claves?)(?:\s+([\s\S]*))?$/i);
+    const cmd = m[1].toLowerCase();
+    const resto = (m[2] || '').trim();
+
+    if (cmd === 'claves') {
+      const filas = buscarLicencias(resto, 10);
+      if (!filas.length) return responder(resto ? `Sin ventas para «${resto}».` : 'Todavía no hay claves emitidas.');
+      const total = contarLicencias();
+      const lineas = filas.map(f => `${fechaCorta(f.fecha)} · ${f.cliente} · ${f.codigo_pc}`);
+      await responder(`🔑 Ventas optiMAX (${filas.length}${resto ? '' : ` de ${total}`}):\n` + lineas.join('\n'));
+      if (filas.length === 1) await responder(filas[0].clave);
+      else await responder('Para reenviar una clave: /clave Nombre CODIGO');
+      return;
+    }
+
+    // /clave
+    const cod = lic.extraerCodigo(resto);
+    if (!cod) return responder('No encontré el código de PC (formato XXXX-XXXX-XXXX).\n\n' + AYUDA_CLAVE);
+    const primeraLinea = resto.split('\n')[0].replace(cod.raw, ' ');
+    const nombre = lic.normalizarNombre(primeraLinea).replace(/^[\s,;:|\-–—]+|[\s,;:|\-–—]+$/g, '');
+    if (!nombre) return responder('Falta el nombre del cliente (va en la primera línea).\n\n' + AYUDA_CLAVE);
+
+    const previa = getLicencia(nombre, cod.codigo);
+    let clave;
+    if (previa) {
+      clave = previa.clave;
+      await responder(`Ya estaba registrada el ${fechaCorta(previa.fecha)} — te reenvío la misma clave.`);
+    } else {
+      clave = lic.generarClave(nombre, cod.codigo);
+      insertLicencia({ cliente: nombre, codigo: cod.codigo, clave });
+      console.log(`🔑 Clave optiMAX emitida: ${nombre} — ${cod.codigo}`);
+    }
+    await responder(clave);
+    await responder(lic.mensajeCliente(nombre, cod.codigo, clave));
+  } catch (err) {
+    console.error('❌ Error en comando de clave:', err.message);
+    await responder(`⚠️ No se generó la clave: ${err.message}`);
   }
 }
 

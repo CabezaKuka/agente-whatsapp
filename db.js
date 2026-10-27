@@ -35,6 +35,14 @@ function initDb() {
       descripcion TEXT NOT NULL,
       orden INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS licencias (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fecha TEXT NOT NULL,
+      cliente TEXT NOT NULL,
+      codigo_pc TEXT NOT NULL,
+      clave TEXT NOT NULL
+    );
   `);
 
   // Poblar catálogo solo si está vacío
@@ -158,6 +166,33 @@ function deleteProducto(id) {
   db.prepare(`DELETE FROM catalogo WHERE id=?`).run(id);
 }
 
+// ── LICENCIAS optiMAX (claves PRO emitidas por el bot) ───────────────────
+function insertLicencia({ cliente, codigo, clave }) {
+  db.prepare(`
+    INSERT INTO licencias (fecha, cliente, codigo_pc, clave) VALUES (?, ?, ?, ?)
+  `).run(new Date().toISOString(), cliente, codigo, clave);
+}
+
+function getLicencia(cliente, codigo) {
+  return db.prepare(`
+    SELECT * FROM licencias WHERE cliente = ? AND codigo_pc = ? ORDER BY id DESC LIMIT 1
+  `).get(cliente, codigo);
+}
+
+// Busca por cliente o código de PC (sin distinguir mayúsculas). Vacío = últimas.
+function buscarLicencias(texto = '', limite = 10) {
+  const t = `%${String(texto).trim().toLowerCase()}%`;
+  return db.prepare(`
+    SELECT * FROM licencias
+    WHERE lower(cliente) LIKE ? OR lower(codigo_pc) LIKE ?
+    ORDER BY id DESC LIMIT ?
+  `).all(t, t, limite);
+}
+
+function contarLicencias() {
+  return db.prepare('SELECT COUNT(*) as n FROM licencias').get().n;
+}
+
 module.exports = {
   initDb,
   saveIncoming,
@@ -171,4 +206,8 @@ module.exports = {
   updateProducto,
   insertProducto,
   deleteProducto,
+  insertLicencia,
+  getLicencia,
+  buscarLicencias,
+  contarLicencias,
 };
