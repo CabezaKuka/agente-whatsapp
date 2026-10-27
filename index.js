@@ -115,6 +115,22 @@ function marcarFlag(waId, flag) {
   }
 }
 
+// ── optiMAX — base de conocimiento del software ───────────────────────────
+// Se lee de optimax-bot.md (en la raíz del repo) y se agrega al prompt SOLO
+// para los números que preguntaron por optiMAX (flag 'optimax' en flags.json).
+// Así no encarece ni contamina las conversaciones de los otros productos.
+// Si el archivo no está, el bot sigue funcionando igual que antes.
+let OPTIMAX_KB = '';
+try {
+  OPTIMAX_KB = fs.readFileSync(require('path').join(__dirname, 'optimax-bot.md'), 'utf8');
+  console.log('✅ Base de conocimiento optiMAX cargada');
+} catch (err) {
+  console.error('❌ No se pudo leer optimax-bot.md — el bot no tendrá info de optiMAX:', err.message);
+}
+
+// Palabras que indican consulta por el software (incluye la nota del anuncio).
+const REGEX_OPTIMAX = /opti-?max|gmsoftware|nesting|\bdxf\b|fast ?cam|(mesa|corte|cortadora|m[aá]quina)( de| por)? plasma|plasma cnc|desarrollos? de chapa|(programa|software) (de|para) (corte|cortar|nesting|chapa|plasma)/i;
+
 const FOLLETOS = {
   clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
   mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
@@ -127,7 +143,7 @@ const FOLLETOS = {
   tempwifi:      'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaTEMPWIFI.png',
 };
 
-function buildSystemPrompt() {
+function buildSystemPrompt(from) {
   const ahora = new Date();
   const bolivia = new Date(ahora.getTime() - 4 * 60 * 60 * 1000);
   const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
@@ -143,7 +159,7 @@ function buildSystemPrompt() {
   return `Sos un vendedor respondiendo por WhatsApp. Vendés equipos agrícolas y el Nivel Digital para construcción y montaje.
 Hoy es ${diaActual} ${fechaActual} (hora Bolivia, GMT-4).
 Respondés en nombre de la empresa por WhatsApp con mensajes naturales, breves y claros.
-Mensajes MUY cortos — máximo 2 líneas, sin excepción.
+Mensajes MUY cortos — máximo 2 líneas (única excepción: consultas sobre optiMAX, ver su sección al final).
 En el PRIMER mensaje de cada conversación sé todavía más breve: una frase con el precio y el problema que resuelve (no solo la función técnica), y cerrá con UNA sola pregunta simple y directa para entender qué necesita el cliente. Evitá preguntas con varias opciones para elegir — mejor una pregunta abierta corta que el cliente responda con sus propias palabras. No menciones specs, características adicionales ni casos de uso en ese primer mensaje — guardalos para la respuesta siguiente, una vez que el cliente ya contestó algo.
 NUNCA usás guiones, viñetas ni listas. Todo en texto corrido.
 Los clientes escriben con ortografía informal, abreviaciones y errores típicos del español boliviano. Entendé el contexto general, pero NUNCA asumas el significado de una respuesta que tenga dos o más interpretaciones posibles. Si el mensaje es ambiguo, hacé UNA sola pregunta breve para aclarar. Si sigue siendo ambiguo después de esa pregunta, derivá al 76317951 indicando que sos un asistente virtual y agregá [DERIVACION] al final de tu respuesta.
@@ -205,7 +221,18 @@ FOLLETOS-IMAGENES DISPONIBLES — solo estas palabras clave existen, no inventé
 - TempWIFI: [FOLLETO_tempwifi]
 Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
 CATÁLOGO DE EQUIPOS:
-${getCatalogoTexto()}`;
+${getCatalogoTexto()}${(from && OPTIMAX_KB && tieneFlag(from, 'optimax')) ? `
+
+SOFTWARE optiMAX — este cliente consulta (o consultó) por optiMAX. Cuando la consulta sea sobre optiMAX, estas reglas tienen PRIORIDAD sobre todas las anteriores:
+- optiMAX es un programa para Windows, desarrollo de GMSoftware y SIC (Servicio Industrial Cruceño), Santa Cruz de la Sierra, Bolivia. Respondé solo con la BASE optiMAX de abajo; si algo no figura ahí, no lo supongas ni lo inventes.
+- LARGO: hasta 4 líneas por mensaje (no 2). Igual que el resto, sin guiones ni listas, todo en texto corrido. En los pasos de compra o de instalación, explicá uno o dos pasos por mensaje.
+- DERIVACIÓN optiMAX: siempre al 77626675 (Solo WhatsApp), NUNCA al 76317951. Usá "Soy un asistente virtual — para eso escribí a ventas al 77626675 (Solo WhatsApp)." y agregá [DERIVACION] al final de tu respuesta. Derivá en los casos que indica la sección 1 de la base.
+- HORARIO: optiMAX se atiende 24/7. No apliques el horario de lunes a viernes de 7 a 11 ni mandes [ENVIAR_UBICACION] para optiMAX.
+- NO apliques MODO CIERRE: no hay envíos ni cantidades, no preguntes ciudad. Si quiere comprar, explicá los pasos de la sección 7 y agregá [LEAD_CALIENTE].
+- No hay folletos de optiMAX: nunca uses palabras clave [FOLLETO_...] para optiMAX. Mandá el link de la página o el de descarga.
+- No ofrezcas productos de la fábrica (equipos agrícolas, HiWIFI, nivel) a quien pregunta por optiMAX, salvo que él los pregunte.
+BASE optiMAX:
+${OPTIMAX_KB}` : ''}`;
 }
 const conversaciones = {};
 
@@ -1136,7 +1163,16 @@ async function procesarMensajes(from) {
     conversaciones[from].push({ role: 'user', content: textoCombinado });
     truncateConversation(from);
 
-    const systemPrompt = buildSystemPrompt();
+    // ── optiMAX: marcar el número la primera vez que consulta por el software
+    // (incluye la nota de anuncio). Desde ahí el prompt suma la base optiMAX.
+    try {
+      if (OPTIMAX_KB && !tieneFlag(from, 'optimax') && REGEX_OPTIMAX.test(textoCombinado)) {
+        marcarFlag(from, 'optimax');
+        console.log(`💻 Consulta optiMAX detectada para ${from}`);
+      }
+    } catch (err) { console.error(`❌ Error detectando optiMAX de ${from} (no crítico):`, err.message); }
+
+    const systemPrompt = buildSystemPrompt(from);
     const respuesta = await ai.messages.create({
       model: MODELOS[modeloActivo],
       max_tokens: 500,
@@ -1166,21 +1202,24 @@ async function procesarMensajes(from) {
         return; // No enviar nada
       }
 
-      const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(textoCombinado);
+      const esOptimax = tieneFlag(from, 'optimax');
+      const etiqueta = esOptimax ? ' optiMAX' : '';
+      const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(textoCombinado)
+        || (esOptimax && /ya pagu[eé]|comprobante|\btxid\b|licencia pro|clave pro/i.test(textoCombinado));
       if ((pideMarcador || pareceCotizacion) && !tieneFlag(from, 'lead_avisado')) {
         marcarFlag(from, 'lead_avisado');
         const nombreContacto = contactName ? `${contactName} — ` : '';
-        const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
+        const avisoTexto = `🔥 Lead caliente${etiqueta}: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
         try { await enviarMensaje(NOTIFICAR_A, avisoTexto); } catch (err) { console.error('❌ Error notificando lead caliente:', err.message); }
       }
 
       // Notificación de derivación — doble seguridad:
       // 1) el modelo puso [DERIVACION], o
-      // 2) la respuesta contiene el número 76317951 (por si el modelo olvidó el marcador)
-      const pareceDerivacion = /76317951/.test(reply);
+      // 2) la respuesta contiene 76317951 o 77626675 (ventas optiMAX), por si el modelo olvidó el marcador
+      const pareceDerivacion = /76317951|77626675/.test(reply);
       if (pideDerivacion || pareceDerivacion) {
         const nombreContacto = contactName ? `${contactName} — ` : '';
-        const avisoDerivacion = `↗️ Derivación: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
+        const avisoDerivacion = `↗️ Derivación${etiqueta}: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
         try { await enviarMensaje(NOTIFICAR_A, avisoDerivacion); } catch (err) { console.error('❌ Error notificando derivación:', err.message); }
       }
     } catch (err) { console.error('❌ Error en aviso de lead caliente (no afecta la respuesta al cliente):', err.message); }
