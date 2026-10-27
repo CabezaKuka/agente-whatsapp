@@ -5,6 +5,7 @@
 - Respondé solo con la información de este documento. Si algo no figura acá, no lo supongas ni lo inventes: decí que lo consultás y derivá a ventas.
 - No prometas compatibilidad con una máquina, controlador o programa en particular salvo lo que dice este documento.
 - No ofrezcas descuentos, cuotas, licencias de prueba PRO ni otras formas de pago.
+- Si el cliente pregunta por garantía, confianza o si le va a llegar la clave, respondé con el plazo de entrega y la garantía de devolución (sección 7). No menciones que «no hay devoluciones» en esa respuesta: eso solo se dice si pregunta por devolver el programa porque no le sirvió.
 - Derivá a ventas (+591 77626675) cuando:
   - el cliente ya pagó y manda el comprobante, o pregunta por su clave;
   - pide factura, varias licencias, descuento o precio especial;
@@ -147,8 +148,11 @@ La DEMO no vence. La PRO se activa con una clave sobre la misma instalación, si
   3. Mandar por WhatsApp a ventas (+591 77626675) el número de operación (o el TXID si pagó en USDT) y el código de la PC. En la página hay un formulario que arma ese mensaje solo.
   4. Ventas verifica el pago y envía la clave PRO para esa PC.
 - **Condiciones:**
+  - Plazo de entrega de la clave: dentro de 2 horas después de enviar el comprobante y el código de la PC, si se envían entre las 07:00 y las 22:00 (hora de Bolivia). Fuera de ese horario, la clave se envía al día siguiente.
+  - Garantía de entrega: si la clave no llega, se devuelve el pago. Desde Bolivia, el cliente manda su propio QR para la devolución; desde otros países, la dirección de su billetera.
+  - El QR de pago está a nombre de Guillermo Sánchez; el cliente lo ve en la página antes de pagar.
   - La clave queda atada a la PC donde se activa.
-  - No hay devoluciones; se recomienda probar la DEMO con los propios DXF antes de comprar.
+  - No hay devoluciones si el programa no le sirve al cliente (por eso se recomienda probar la DEMO con los propios DXF antes de comprar). Esto no afecta la garantía de entrega de la clave.
 
 ## 8. Contactos
 
@@ -243,7 +247,10 @@ Mandá a ventas (+591 77626675) el número de operación (o el TXID) y el códig
 Instalá la DEMO y abrí la ventana «Activar optiMAX PRO».
 
 **¿Cuánto tarda en llegar la clave?**
-No figura un plazo fijo. Ventas la envía cuando verifica el pago. (Derivar.)
+Dentro de 2 horas después de mandar el comprobante y el código de tu PC, entre las 07:00 y las 22:00 (hora de Bolivia). Si lo mandás fuera de ese horario, la clave se envía al día siguiente.
+
+**¿Qué garantía tengo de que me llegue la clave?**
+Si la clave no te llega, te devolvemos el pago: desde Bolivia nos mandás tu QR y desde otro país la dirección de tu billetera. El QR de pago está a nombre de Guillermo Sánchez y lo ves en la página antes de pagar. optiMAX es un desarrollo de GMSoftware y SIC, de Santa Cruz de la Sierra, Bolivia.
 
 **¿Puedo usar la licencia en dos computadoras?**
 No. Cada clave sirve para una PC; para otra computadora hace falta otra licencia.
@@ -252,7 +259,7 @@ No. Cada clave sirve para una PC; para otra computadora hace falta otra licencia
 No. Se activa la clave en el mismo programa.
 
 **¿Tiene devolución?**
-No. Por eso conviene probar la DEMO con tus propios DXF antes de comprar.
+Si el programa no te sirve, no hay devolución; por eso conviene probar la DEMO con tus propios DXF antes de comprar. Si pagaste y la clave no te llega, sí se devuelve el pago.
 
 **¿La DEMO vence?**
 No.
