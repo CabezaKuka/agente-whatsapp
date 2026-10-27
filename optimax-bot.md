@@ -140,17 +140,18 @@ La DEMO no vence. La PRO se activa con una clave sobre la misma instalación, si
 - **Precio PRO:** 49 USDT, o 590 Bs desde Bolivia. Pago único, una licencia por PC.
 - **Formas de pago:**
   - **Desde Bolivia:** QR del Banco Nacional de Bolivia por 590 Bs (está en la página, sección Comprar).
-  - **Desde otros países:** 49 USDT por la red BNB Smart Chain (BEP-20), a la dirección que figura en la página. Solo esa red; por otra red el dinero puede perderse. La comisión la paga quien envía y tienen que llegar 49 USDT completos.
+  - **Desde cualquier país, con Binance:** 49 USDT con Binance Pay. En la página está el QR para escanear con la app de Binance y un botón «Pagar con Binance Pay» (desde el celular). Sin comisión.
+  - **Desde cualquier país, con otra billetera:** 49 USDT por la red BNB Smart Chain (BEP-20), a la dirección que figura en la página. Solo esa red; por otra red el dinero puede perderse. Se envían 49 USDT: la comisión de la red corre por nuestra cuenta.
   - No hay otras formas de pago por ahora.
 - **Pasos para comprar:**
-  1. Instalar la DEMO y abrir la ventana «Activar optiMAX PRO», donde aparece el código de la PC.
-  2. Pagar con el QR (Bolivia) o en USDT (otros países).
-  3. Mandar por WhatsApp a ventas (+591 77626675) el número de operación (o el TXID si pagó en USDT) y el código de la PC. En la página hay un formulario que arma ese mensaje solo.
+  1. Instalar la DEMO y abrir la ventana «Activar optiMAX PRO», donde aparece el código de la PC. El botón «Comprar PRO» de esa ventana abre la página de compra con el código ya cargado.
+  2. Pagar con el QR (Bolivia), con Binance Pay o en USDT BEP-20 (otros países), y guardar una captura del pago.
+  3. En la página, completar el nombre que va a figurar en la licencia (persona o empresa) y el código de la PC, y tocar «Enviar por WhatsApp» (o escanear con el celular el QR que aparece). Se abre WhatsApp con el mensaje armado para ventas (+591 77626675); el cliente adjunta la captura del pago y lo envía.
   4. Ventas verifica el pago y envía la clave PRO para esa PC.
 - **Condiciones:**
-  - Plazo de entrega de la clave: dentro de 2 horas después de enviar el comprobante y el código de la PC, si se envían entre las 07:00 y las 22:00 (hora de Bolivia). Fuera de ese horario, la clave se envía al día siguiente.
-  - Garantía de entrega: si la clave no llega, se devuelve el pago. Desde Bolivia, el cliente manda su propio QR para la devolución; desde otros países, la dirección de su billetera.
-  - El QR de pago está a nombre de Guillermo Sánchez; el cliente lo ve en la página antes de pagar.
+  - Plazo de entrega de la clave: dentro de 2 horas después de enviar la captura del pago, el nombre y el código de la PC, si se envían entre las 07:00 y las 22:00 (hora de Bolivia). Fuera de ese horario, la clave se envía al día siguiente.
+  - Garantía de entrega: si la clave no llega, se devuelve el pago. Desde Bolivia, el cliente manda su propio QR para la devolución; desde otros países, la dirección de su billetera o su ID de Binance.
+  - El QR de pago en Bs está a nombre de Guillermo Sánchez; el cliente lo ve en la página antes de pagar.
   - La clave queda atada a la PC donde se activa.
   - No hay devoluciones si el programa no le sirve al cliente (por eso se recomienda probar la DEMO con los propios DXF antes de comprar). Esto no afecta la garantía de entrega de la clave.
 
@@ -235,22 +236,28 @@ Sí, con el módulo de guillotina (PRO): cortes de lado a lado, respetando el la
 Con el QR del Banco Nacional de Bolivia que está en la página (sección Comprar), por 590 Bs. Guardá el comprobante.
 
 **¿Cómo pago desde otro país?**
-49 USDT por la red BNB Smart Chain (BEP-20) a la dirección de la página. Solo esa red. Tienen que llegar 49 USDT completos.
+Con Binance Pay (49 USDT, escaneando el QR de la página con la app de Binance o con el botón «Pagar con Binance Pay»), o desde otra billetera enviando 49 USDT por la red BNB Smart Chain (BEP-20) a la dirección de la página. Solo esa red. La comisión de la red corre por nuestra cuenta. Guardá una captura del pago.
+
+**¿Hay que pagar comisión?**
+No. Enviá 49 USDT; la comisión de la red la asumimos nosotros. Con Binance Pay no hay comisión.
 
 **¿Aceptan tarjeta, PayPal o transferencia internacional?**
-Por ahora no; solo QR desde Bolivia o USDT (BEP-20).
+Por ahora no; solo QR desde Bolivia, Binance Pay o USDT (BEP-20).
 
 **Ya pagué, ¿qué hago?**
-Mandá a ventas (+591 77626675) el número de operación (o el TXID) y el código de tu PC, que aparece en la ventana «Activar optiMAX PRO». Ventas verifica el pago y te envía la clave. (Derivar.)
+En la página (sección Comprar) escribí el nombre para la licencia y el código de tu PC, y tocá «Enviar por WhatsApp»: se abre el mensaje para ventas (+591 77626675) y le adjuntás la captura del pago. Ventas verifica el pago y te envía la clave. No hace falta número de operación ni TXID. (Derivar.)
+
+**¿Qué nombre pongo en la licencia?**
+El tuyo o el de tu empresa, como quieras que aparezca en «Acerca de» del programa.
 
 **¿Dónde veo el código de mi PC?**
-Instalá la DEMO y abrí la ventana «Activar optiMAX PRO».
+Instalá la DEMO y abrí la ventana «Activar optiMAX PRO». Con el botón «Comprar PRO» de esa ventana, la página se abre con el código ya cargado.
 
 **¿Cuánto tarda en llegar la clave?**
-Dentro de 2 horas después de mandar el comprobante y el código de tu PC, entre las 07:00 y las 22:00 (hora de Bolivia). Si lo mandás fuera de ese horario, la clave se envía al día siguiente.
+Dentro de 2 horas después de mandar la captura del pago y el código de tu PC, entre las 07:00 y las 22:00 (hora de Bolivia). Si lo mandás fuera de ese horario, la clave se envía al día siguiente.
 
 **¿Qué garantía tengo de que me llegue la clave?**
-La clave te llega dentro de 2 horas después de mandar el comprobante y el código de tu PC, entre las 07:00 y las 22:00 (hora de Bolivia); fuera de ese horario, al día siguiente. Si no te llega, te devolvemos el pago: desde Bolivia nos mandás tu QR y desde otro país la dirección de tu billetera. El QR de pago está a nombre de Guillermo Sánchez y lo ves en la página antes de pagar. optiMAX es un desarrollo de GMSoftware y SIC, de Santa Cruz de la Sierra, Bolivia.
+La clave te llega dentro de 2 horas después de mandar la captura del pago y el código de tu PC, entre las 07:00 y las 22:00 (hora de Bolivia); fuera de ese horario, al día siguiente. Si no te llega, te devolvemos el pago: desde Bolivia nos mandás tu QR y desde otro país la dirección de tu billetera o tu ID de Binance. El QR de pago en Bs está a nombre de Guillermo Sánchez y lo ves en la página antes de pagar. optiMAX es un desarrollo de GMSoftware y SIC, de Santa Cruz de la Sierra, Bolivia.
 
 **¿Puedo usar la licencia en dos computadoras?**
 No. Cada clave sirve para una PC; para otra computadora hace falta otra licencia.
