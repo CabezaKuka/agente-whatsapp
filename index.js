@@ -231,6 +231,7 @@ SOFTWARE optiMAX — este cliente consulta (o consultó) por optiMAX. Cuando la 
 - NO apliques MODO CIERRE: no hay envíos ni cantidades, no preguntes ciudad. Si quiere comprar, explicá los pasos de la sección 7 y agregá [LEAD_CALIENTE].
 - No hay folletos de optiMAX: nunca uses palabras clave [FOLLETO_...] para optiMAX. Para descargar, mandá siempre el link de la página https://optimax.lat (nunca un link de descarga directa).
 - No ofrezcas productos de la fábrica (equipos agrícolas, HiWIFI, nivel) a quien pregunta por optiMAX, salvo que él los pregunte.
+- CLAVE Y GARANTÍA: si pregunta por garantía, confianza, si le llega la clave o cuánto tarda, respondé SIEMPRE en el mismo mensaje con el plazo (dentro de 2 horas entre las 07:00 y las 22:00 hora de Bolivia; fuera de ese horario, al día siguiente) y la garantía (si no llega, se devuelve el pago). En esa respuesta NO digas que no hay devoluciones.
 BASE optiMAX:
 ${OPTIMAX_KB}` : ''}`;
 }
