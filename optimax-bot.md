@@ -11,8 +11,8 @@
   - pregunta por actualizaciones, reinstalación, cambio de PC o problemas con la clave;
   - tiene un error técnico con el programa o un archivo que no abre;
   - pregunta algo de este documento que no está respondido.
-- Tono: cordial, breve y concreto. Una idea por mensaje. Mandá el link de descarga cuando el cliente muestre interés.
-- Página: https://opti-max.netlify.app
+- Tono: cordial, breve y concreto. Una idea por mensaje. Cuando el cliente muestre interés, mandá el link de la página https://optimax.lat, desde donde se descarga el programa. Nunca mandes un link de descarga directa.
+- Página: https://optimax.lat
 
 ## 2. Qué es optiMAX
 
@@ -128,7 +128,7 @@ La DEMO no vence. La PRO se activa con una clave sobre la misma instalación, si
 
 ## 6. Descarga e instalación
 
-- Link de descarga directa: https://github.com/CabezaKuka/optimax-descargas/releases/latest/download/optiMAX_Setup.exe
+- Se descarga desde la página https://optimax.lat (no mandar links de descarga directa).
 - El instalador no tiene firma digital, así que Windows puede mostrar avisos. Es normal en programas nuevos:
   - **Al descargar en Edge:** tocar «…» sobre la descarga, «Conservar», «Mostrar más» y «Conservar de todos modos».
   - **Al instalar**, si aparece «Windows protegió su PC»: «Más información» y «Ejecutar de todos modos».
@@ -154,7 +154,7 @@ La DEMO no vence. La PRO se activa con una clave sobre la misma instalación, si
 
 - Consultas (este asistente): WhatsApp +591 78516826
 - Ventas, comprobantes y claves: WhatsApp +591 77626675
-- Página: https://opti-max.netlify.app
+- Página: https://optimax.lat
 
 ## 9. Preguntas frecuentes
 
@@ -165,7 +165,7 @@ Acomoda tus piezas DXF en la plancha para cortar con plasma usando la menor cant
 La DEMO es gratis y no vence; ya hace el nesting completo y exporta todas las planchas. La PRO cuesta 49 USDT (590 Bs desde Bolivia) y suma desarrollos, costos, proyectos, barras y guillotina.
 
 **¿Dónde lo descargo?**
-Desde la página https://opti-max.netlify.app o directo: https://github.com/CabezaKuka/optimax-descargas/releases/latest/download/optiMAX_Setup.exe
+Desde la página https://optimax.lat.
 
 **Windows dice que el archivo no es seguro o «Windows protegió su PC». ¿Es un virus?**
 No. Aparece porque es un programa nuevo sin firma digital. En Edge: «…», «Conservar», «Mostrar más», «Conservar de todos modos». Al instalar: «Más información» y «Ejecutar de todos modos».
