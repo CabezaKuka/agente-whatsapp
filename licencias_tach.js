@@ -67,7 +67,17 @@ function cargarPrivada() {
   if (!pem) throw new Error('Falta la variable OPTITACH_PRIVATE_KEY en Railway.');
   if (!pem.includes('BEGIN')) pem = Buffer.from(pem, 'base64').toString('utf8'); // venía en base64
   pem = pem.replace(/\\n/g, '\n');
-  const priv = crypto.createPrivateKey(pem);
+  if (/BEGIN [A-Z ]*PUBLIC KEY/.test(pem)) {
+    throw new Error('OPTITACH_PRIVATE_KEY tiene la llave PÚBLICA. Hay que pegar el contenido de llave_privada_tach.pem.');
+  }
+  // Railway a veces convierte los saltos de línea en espacios: se rearma el PEM desde el cuerpo base64.
+  const m = pem.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+  if (!m) throw new Error('OPTITACH_PRIVATE_KEY no tiene formato PEM (falta BEGIN/END PRIVATE KEY).');
+  const cuerpo = m[2].replace(/\s+/g, '');
+  pem = `-----BEGIN ${m[1]}-----\n${cuerpo.match(/.{1,64}/g).join('\n')}\n-----END ${m[1]}-----\n`;
+  let priv;
+  try { priv = crypto.createPrivateKey(pem); }
+  catch (err) { throw new Error('OPTITACH_PRIVATE_KEY no se pudo leer (¿está completa y es la privada de optiTACH?).'); }
   if (priv.asymmetricKeyType !== 'ed25519') throw new Error('OPTITACH_PRIVATE_KEY no es una llave Ed25519.');
   return priv;
 }
