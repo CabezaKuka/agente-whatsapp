@@ -14,7 +14,12 @@ const {
   updateProducto,
   insertProducto,
   deleteProducto,
+  insertLicencia,
+  getLicencia,
+  buscarLicencias,
+  contarLicencias,
 } = require('./db');
+const lic = require('./licencias');
 
 const app = express();
 app.use(bodyParser.json());
@@ -115,6 +120,22 @@ function marcarFlag(waId, flag) {
   }
 }
 
+// ── optiMAX — base de conocimiento del software ───────────────────────────
+// Se lee de optimax-bot.md (en la raíz del repo) y se agrega al prompt SOLO
+// para los números que preguntaron por optiMAX (flag 'optimax' en flags.json).
+// Así no encarece ni contamina las conversaciones de los otros productos.
+// Si el archivo no está, el bot sigue funcionando igual que antes.
+let OPTIMAX_KB = '';
+try {
+  OPTIMAX_KB = fs.readFileSync(require('path').join(__dirname, 'optimax-bot.md'), 'utf8');
+  console.log('✅ Base de conocimiento optiMAX cargada');
+} catch (err) {
+  console.error('❌ No se pudo leer optimax-bot.md — el bot no tendrá info de optiMAX:', err.message);
+}
+
+// Palabras que indican consulta por el software (incluye la nota del anuncio).
+const REGEX_OPTIMAX = /opti-?max|gmsoftware|nesting|\bdxf\b|fast ?cam|(mesa|corte|cortadora|m[aá]quina)( de| por)? plasma|plasma cnc|desarrollos? de chapa|(programa|software) (de|para) (corte|cortar|nesting|chapa|plasma)|\bsoftware\b|\bprograma\b/i;
+
 const FOLLETOS = {
   clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
   mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
@@ -127,7 +148,7 @@ const FOLLETOS = {
   tempwifi:      'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/fichaTEMPWIFI.png',
 };
 
-function buildSystemPrompt() {
+function buildSystemPrompt(from) {
   const ahora = new Date();
   const bolivia = new Date(ahora.getTime() - 4 * 60 * 60 * 1000);
   const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
@@ -140,10 +161,10 @@ function buildSystemPrompt() {
   const hoyAtiende = atiende(idx);
   const mananaAtiende = atiende((idx + 1) % 7);
 //Sos un vendedor de equipos agrícolas respondiendo por WhatsApp.
-  return `Sos un vendedor respondiendo por WhatsApp. Vendés equipos agrícolas y el Nivel Digital para construcción y montaje.
+  return `Sos un vendedor respondiendo por WhatsApp. Vendés el software de nesting optiMAX, equipos agrícolas, monitores de temperatura y el Nivel Digital para construcción y montaje.
 Hoy es ${diaActual} ${fechaActual} (hora Bolivia, GMT-4).
 Respondés en nombre de la empresa por WhatsApp con mensajes naturales, breves y claros.
-Mensajes MUY cortos — máximo 2 líneas, sin excepción.
+Mensajes MUY cortos — máximo 2 líneas (única excepción: consultas sobre optiMAX, ver su sección al final).
 En el PRIMER mensaje de cada conversación sé todavía más breve: una frase con el precio y el problema que resuelve (no solo la función técnica), y cerrá con UNA sola pregunta simple y directa para entender qué necesita el cliente. Evitá preguntas con varias opciones para elegir — mejor una pregunta abierta corta que el cliente responda con sus propias palabras. No menciones specs, características adicionales ni casos de uso en ese primer mensaje — guardalos para la respuesta siguiente, una vez que el cliente ya contestó algo.
 NUNCA usás guiones, viñetas ni listas. Todo en texto corrido.
 Los clientes escriben con ortografía informal, abreviaciones y errores típicos del español boliviano. Entendé el contexto general, pero NUNCA asumas el significado de una respuesta que tenga dos o más interpretaciones posibles. Si el mensaje es ambiguo, hacé UNA sola pregunta breve para aclarar. Si sigue siendo ambiguo después de esa pregunta, derivá al 76317951 indicando que sos un asistente virtual y agregá [DERIVACION] al final de tu respuesta.
@@ -154,6 +175,7 @@ Solo preguntás cuando hay dos o más productos que podrían encajar y necesitá
 Al hacer esa pregunta, evitá el formato "encuesta" de listar 3-4 opciones para elegir (ej. "¿depósito, bodega, cámara frigorífica u otro?") — sonás más natural con una pregunta abierta corta (ej. "¿para qué ambiente lo necesitás?"). Variá la forma de preguntar de una conversación a otra, no repitas siempre la misma frase armada. Excepción: cuando el cliente necesita decirte un valor técnico exacto para identificar el producto correcto (por ejemplo calibre de zaranda o código CM), ahí sí podés nombrar los valores disponibles porque es información que el cliente debe conocer, no relleno conversacional.
 Si el cliente pregunta poco, respondés con lo más relevante. Si profundiza, profundizás vos también.
 Si el cliente saluda, saludás y preguntás en qué podés ayudar, sin presentarte.
+CONSULTA SIN PRODUCTO: si el cliente pide información o dice que quiere saber más, pero NO hay [Contexto interno: ...] de anuncio y ni él ni la conversación nombraron un producto, respondé con este texto: "Hola 👋 ¿Sobre qué te gustaría saber más? Tenemos el software de nesting optiMAX, monitores de temperatura HiWIFI, clasificadoras de granos, zarandas manuales y otros equipos." Esta regla tiene prioridad sobre los ganchos de primer contacto de cada producto (HiWIFI, TempWIFI, Logger, multi-producto), que se usan solo cuando el anuncio o el cliente ya indicaron ese producto. Después respondé según el producto que elija, con las reglas de ese producto.
 VENDER DESPUÉS DE RESPONDER: cuando el cliente hace una pregunta técnica (material, medidas, rango, alimentación, etc.), primero respondé el dato concreto tal como está en el catálogo, y en la misma respuesta agregá un beneficio breve relacionado con ese dato, cerrando con una pregunta que haga avanzar la venta — no una que vuelva a calificar desde cero. Ejemplo: "¿sirve para cámara fría?" → "Sí, mide dentro del rango de tu cámara y te avisa al toque si la temperatura se sale de lo normal. ¿De qué tamaño es tu cámara?". Siempre dentro del límite de 2 líneas.
 MODO CIERRE (si es por planchas perforadas, NO preguntes ciudad de envío porque no se envían — preguntá solo cantidad y medida): apenas el cliente muestre intención de compra (dice que quiere comprar, pide cotización o presupuesto, pregunta por envío a su ciudad, menciona cantidades, pide el juego completo), dejá de describir el producto y pasá a concretar: preguntá a qué ciudad sería el envío y cuántas unidades necesita (una o dos preguntas por mensaje, no un interrogatorio). Cuando ya tengas ciudad o cantidad, indicá "Para concretar el pedido escribí al 76317951 (Solo WhatsApp)." y agregá [DERIVACION] al final de tu respuesta.
 Si el cliente pide directamente hablar con una persona, ahí sí derivá con "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)." sin más preguntas, y agregá [DERIVACION] al final de tu respuesta.
@@ -205,7 +227,19 @@ FOLLETOS-IMAGENES DISPONIBLES — solo estas palabras clave existen, no inventé
 - TempWIFI: [FOLLETO_tempwifi]
 Ejemplo: "Te mando la ficha/foto 👇 [FOLLETO_CLASIFICADORA]"
 CATÁLOGO DE EQUIPOS:
-${getCatalogoTexto()}`;
+${getCatalogoTexto()}${(from && OPTIMAX_KB && tieneFlag(from, 'optimax')) ? `
+
+SOFTWARE optiMAX — este cliente consulta (o consultó) por optiMAX. Cuando la consulta sea sobre optiMAX, estas reglas tienen PRIORIDAD sobre todas las anteriores:
+- optiMAX es un programa para Windows, desarrollo de GMSoftware y SIC (Servicio Industrial Cruceño), Santa Cruz de la Sierra, Bolivia. Respondé solo con la BASE optiMAX de abajo; si algo no figura ahí, no lo supongas ni lo inventes.
+- LARGO: hasta 4 líneas por mensaje (no 2). Igual que el resto, sin guiones ni listas, todo en texto corrido. En los pasos de compra o de instalación, explicá uno o dos pasos por mensaje.
+- DERIVACIÓN optiMAX: siempre al 77626675 (Solo WhatsApp), NUNCA al 76317951. Usá "Soy un asistente virtual — para eso escribí a ventas al 77626675 (Solo WhatsApp)." y agregá [DERIVACION] al final de tu respuesta. Derivá en los casos que indica la sección 1 de la base.
+- HORARIO: optiMAX se atiende 24/7. No apliques el horario de lunes a viernes de 7 a 11 ni mandes [ENVIAR_UBICACION] para optiMAX.
+- NO apliques MODO CIERRE: no hay envíos ni cantidades, no preguntes ciudad. Si quiere comprar, explicá los pasos de la sección 7 y agregá [LEAD_CALIENTE].
+- No hay folletos de optiMAX: nunca uses palabras clave [FOLLETO_...] para optiMAX. Para descargar, mandá siempre el link de la página https://optimax.lat (nunca un link de descarga directa).
+- No ofrezcas productos de la fábrica (equipos agrícolas, HiWIFI, nivel) a quien pregunta por optiMAX, salvo que él los pregunte.
+- CLAVE Y GARANTÍA: si pregunta por garantía, confianza, si le llega la clave o cuánto tarda, respondé SIEMPRE en el mismo mensaje con el plazo (dentro de 2 horas entre las 07:00 y las 22:00 hora de Bolivia; fuera de ese horario, al día siguiente) y la garantía (si no llega, se devuelve el pago). En esa respuesta NO digas que no hay devoluciones.
+BASE optiMAX:
+${OPTIMAX_KB}` : ''}`;
 }
 const conversaciones = {};
 
@@ -975,6 +1009,13 @@ app.post('/webhook', async (req, res) => {
             let text = msg.text?.body || '';
             console.log(`📩 Mensaje de ${from}: ${text}`);
 
+            // ── COMANDOS DE CLAVES optiMAX (solo desde el número del dueño) ──
+            // No pasan por el modelo ni se guardan en el historial del chat.
+            if (from === NOTIFICAR_A && /^\/claves?(\s|$)/i.test(text.trim())) {
+              await manejarComandoClave(text.trim());
+              continue;
+            }
+
             // ── CONTEXTO DE ANUNCIO (Click-to-WhatsApp) ──────────────────
             // Si el mensaje llega desde un anuncio de Facebook/Instagram, Meta
             // incluye msg.referral con el titular y texto del anuncio. Se
@@ -1136,7 +1177,16 @@ async function procesarMensajes(from) {
     conversaciones[from].push({ role: 'user', content: textoCombinado });
     truncateConversation(from);
 
-    const systemPrompt = buildSystemPrompt();
+    // ── optiMAX: marcar el número la primera vez que consulta por el software
+    // (incluye la nota de anuncio). Desde ahí el prompt suma la base optiMAX.
+    try {
+      if (OPTIMAX_KB && !tieneFlag(from, 'optimax') && REGEX_OPTIMAX.test(textoCombinado)) {
+        marcarFlag(from, 'optimax');
+        console.log(`💻 Consulta optiMAX detectada para ${from}`);
+      }
+    } catch (err) { console.error(`❌ Error detectando optiMAX de ${from} (no crítico):`, err.message); }
+
+    const systemPrompt = buildSystemPrompt(from);
     const respuesta = await ai.messages.create({
       model: MODELOS[modeloActivo],
       max_tokens: 500,
@@ -1166,21 +1216,24 @@ async function procesarMensajes(from) {
         return; // No enviar nada
       }
 
-      const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(textoCombinado);
+      const esOptimax = tieneFlag(from, 'optimax');
+      const etiqueta = esOptimax ? ' optiMAX' : '';
+      const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(textoCombinado)
+        || (esOptimax && /ya pagu[eé]|comprobante|\btxid\b|licencia pro|clave pro/i.test(textoCombinado));
       if ((pideMarcador || pareceCotizacion) && !tieneFlag(from, 'lead_avisado')) {
         marcarFlag(from, 'lead_avisado');
         const nombreContacto = contactName ? `${contactName} — ` : '';
-        const avisoTexto = `🔥 Lead caliente: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
+        const avisoTexto = `🔥 Lead caliente${etiqueta}: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
         try { await enviarMensaje(NOTIFICAR_A, avisoTexto); } catch (err) { console.error('❌ Error notificando lead caliente:', err.message); }
       }
 
       // Notificación de derivación — doble seguridad:
       // 1) el modelo puso [DERIVACION], o
-      // 2) la respuesta contiene el número 76317951 (por si el modelo olvidó el marcador)
-      const pareceDerivacion = /76317951/.test(reply);
+      // 2) la respuesta contiene 76317951 o 77626675 (ventas optiMAX), por si el modelo olvidó el marcador
+      const pareceDerivacion = /76317951|77626675/.test(reply);
       if (pideDerivacion || pareceDerivacion) {
         const nombreContacto = contactName ? `${contactName} — ` : '';
-        const avisoDerivacion = `↗️ Derivación: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
+        const avisoDerivacion = `↗️ Derivación${etiqueta}: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
         try { await enviarMensaje(NOTIFICAR_A, avisoDerivacion); } catch (err) { console.error('❌ Error notificando derivación:', err.message); }
       }
     } catch (err) { console.error('❌ Error en aviso de lead caliente (no afecta la respuesta al cliente):', err.message); }
@@ -1262,6 +1315,65 @@ async function procesarMensajes(from) {
     } catch (err2) {
       console.error(`❌ Error mandando el aviso de fallback a ${from}:`, err2.message);
     }
+  }
+}
+
+// ── CLAVES optiMAX POR WHATSAPP ──────────────────────────────────────────
+// /clave Nombre del cliente 7K3Q-WXPM-2HDA  → genera (o reenvía) la clave
+//   El nombre es la primera línea sin el código; el código se busca en todo
+//   el texto, así que se puede pegar debajo el mensaje entero del cliente.
+// /claves [texto]  → busca ventas por cliente o código (vacío = últimas 10)
+const AYUDA_CLAVE = 'Uso:\n/clave Nombre del cliente 7K3Q-WXPM-2HDA\n/claves juan (buscar ventas)\n/claves (últimas 10)';
+
+function fechaCorta(iso) {
+  const { fecha, hora } = toGMTMinus4(iso);
+  const [y, m, d] = fecha.split('-');
+  return `${d}/${m}/${y} ${hora}`;
+}
+
+async function manejarComandoClave(texto) {
+  const responder = async (t) => {
+    try { await enviarMensaje(NOTIFICAR_A, t); }
+    catch (err) { console.error('❌ Error respondiendo comando de clave:', err.message); }
+  };
+  try {
+    const m = texto.match(/^\/(claves?)(?:\s+([\s\S]*))?$/i);
+    const cmd = m[1].toLowerCase();
+    const resto = (m[2] || '').trim();
+
+    if (cmd === 'claves') {
+      const filas = buscarLicencias(resto, 10);
+      if (!filas.length) return responder(resto ? `Sin ventas para «${resto}».` : 'Todavía no hay claves emitidas.');
+      const total = contarLicencias();
+      const lineas = filas.map(f => `${fechaCorta(f.fecha)} · ${f.cliente} · ${f.codigo_pc}`);
+      await responder(`🔑 Ventas optiMAX (${filas.length}${resto ? '' : ` de ${total}`}):\n` + lineas.join('\n'));
+      if (filas.length === 1) await responder(filas[0].clave);
+      else await responder('Para reenviar una clave: /clave Nombre CODIGO');
+      return;
+    }
+
+    // /clave
+    const cod = lic.extraerCodigo(resto);
+    if (!cod) return responder('No encontré el código de PC (formato XXXX-XXXX-XXXX).\n\n' + AYUDA_CLAVE);
+    const primeraLinea = resto.split('\n')[0].replace(cod.raw, ' ');
+    const nombre = lic.normalizarNombre(primeraLinea).replace(/^[\s,;:|\-–—]+|[\s,;:|\-–—]+$/g, '');
+    if (!nombre) return responder('Falta el nombre del cliente (va en la primera línea).\n\n' + AYUDA_CLAVE);
+
+    const previa = getLicencia(nombre, cod.codigo);
+    let clave;
+    if (previa) {
+      clave = previa.clave;
+      await responder(`Ya estaba registrada el ${fechaCorta(previa.fecha)} — te reenvío la misma clave.`);
+    } else {
+      clave = lic.generarClave(nombre, cod.codigo);
+      insertLicencia({ cliente: nombre, codigo: cod.codigo, clave });
+      console.log(`🔑 Clave optiMAX emitida: ${nombre} — ${cod.codigo}`);
+    }
+    await responder(clave);
+    await responder(lic.mensajeCliente(nombre, cod.codigo, clave));
+  } catch (err) {
+    console.error('❌ Error en comando de clave:', err.message);
+    await responder(`⚠️ No se generó la clave: ${err.message}`);
   }
 }
 

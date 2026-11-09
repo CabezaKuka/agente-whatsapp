@@ -43,6 +43,14 @@ function initDb() {
       codigo_pc TEXT NOT NULL,
       clave TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS licencias_tach (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fecha TEXT NOT NULL,
+      cliente TEXT NOT NULL,
+      codigo_tel TEXT NOT NULL,
+      clave TEXT NOT NULL
+    );
   `);
 
   // Poblar catálogo solo si está vacío
@@ -193,6 +201,32 @@ function contarLicencias() {
   return db.prepare('SELECT COUNT(*) as n FROM licencias').get().n;
 }
 
+// ── LICENCIAS optiTACH (claves emitidas por el bot; tabla aparte de optiMAX) ──
+function insertLicenciaTach({ cliente, codigo, clave }) {
+  db.prepare(`
+    INSERT INTO licencias_tach (fecha, cliente, codigo_tel, clave) VALUES (?, ?, ?, ?)
+  `).run(new Date().toISOString(), cliente, codigo, clave);
+}
+
+function getLicenciaTach(cliente, codigo) {
+  return db.prepare(`
+    SELECT * FROM licencias_tach WHERE cliente = ? AND codigo_tel = ? ORDER BY id DESC LIMIT 1
+  `).get(cliente, codigo);
+}
+
+function buscarLicenciasTach(texto = '', limite = 10) {
+  const t = `%${String(texto).trim().toLowerCase()}%`;
+  return db.prepare(`
+    SELECT * FROM licencias_tach
+    WHERE lower(cliente) LIKE ? OR lower(codigo_tel) LIKE ?
+    ORDER BY id DESC LIMIT ?
+  `).all(t, t, limite);
+}
+
+function contarLicenciasTach() {
+  return db.prepare('SELECT COUNT(*) as n FROM licencias_tach').get().n;
+}
+
 module.exports = {
   initDb,
   saveIncoming,
@@ -210,4 +244,8 @@ module.exports = {
   getLicencia,
   buscarLicencias,
   contarLicencias,
+  insertLicenciaTach,
+  getLicenciaTach,
+  buscarLicenciasTach,
+  contarLicenciasTach,
 };

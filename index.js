@@ -18,8 +18,13 @@ const {
   getLicencia,
   buscarLicencias,
   contarLicencias,
+  insertLicenciaTach,
+  getLicenciaTach,
+  buscarLicenciasTach,
+  contarLicenciasTach,
 } = require('./db');
 const lic = require('./licencias');
+const licT = require('./licencias_tach');
 
 const app = express();
 app.use(bodyParser.json());
@@ -1016,6 +1021,12 @@ app.post('/webhook', async (req, res) => {
               continue;
             }
 
+            // ── COMANDOS DE CLAVES optiTACH (solo desde el número del dueño) ──
+            if (from === NOTIFICAR_A && /^\/tachs?(\s|$)/i.test(text.trim())) {
+              await manejarComandoTach(text.trim());
+              continue;
+            }
+
             // ── CONTEXTO DE ANUNCIO (Click-to-WhatsApp) ──────────────────
             // Si el mensaje llega desde un anuncio de Facebook/Instagram, Meta
             // incluye msg.referral con el titular y texto del anuncio. Se
@@ -1373,6 +1384,57 @@ async function manejarComandoClave(texto) {
     await responder(lic.mensajeCliente(nombre, cod.codigo, clave));
   } catch (err) {
     console.error('❌ Error en comando de clave:', err.message);
+    await responder(`⚠️ No se generó la clave: ${err.message}`);
+  }
+}
+
+// ── CLAVES optiTACH POR WHATSAPP ─────────────────────────────────────────
+// /tach Nombre del cliente 7K3Q-WXPM-2HDA  → genera (o reenvía) la clave
+// /tachs [texto]  → busca ventas por cliente o código (vacío = últimas 10)
+const AYUDA_TACH = 'Uso:\n/tach Nombre del cliente 7K3Q-WXPM-2HDA\n/tachs juan (buscar ventas)\n/tachs (últimas 10)';
+
+async function manejarComandoTach(texto) {
+  const responder = async (t) => {
+    try { await enviarMensaje(NOTIFICAR_A, t); }
+    catch (err) { console.error('❌ Error respondiendo comando de tach:', err.message); }
+  };
+  try {
+    const m = texto.match(/^\/(tachs?)(?:\s+([\s\S]*))?$/i);
+    const cmd = m[1].toLowerCase();
+    const resto = (m[2] || '').trim();
+
+    if (cmd === 'tachs') {
+      const filas = buscarLicenciasTach(resto, 10);
+      if (!filas.length) return responder(resto ? `Sin ventas para «${resto}».` : 'Todavía no hay claves de optiTACH emitidas.');
+      const total = contarLicenciasTach();
+      const lineas = filas.map(f => `${fechaCorta(f.fecha)} · ${f.cliente} · ${f.codigo_tel}`);
+      await responder(`🔑 Ventas optiTACH (${filas.length}${resto ? '' : ` de ${total}`}):\n` + lineas.join('\n'));
+      if (filas.length === 1) await responder(filas[0].clave);
+      else await responder('Para reenviar una clave: /tach Nombre CODIGO');
+      return;
+    }
+
+    // /tach
+    const cod = licT.extraerCodigo(resto);
+    if (!cod) return responder('No encontré el código del teléfono (formato XXXX-XXXX-XXXX).\n\n' + AYUDA_TACH);
+    const primeraLinea = resto.split('\n')[0].replace(cod.raw, ' ');
+    const nombre = licT.normalizarNombre(primeraLinea).replace(/^[\s,;:|\-–—]+|[\s,;:|\-–—]+$/g, '');
+    if (!nombre) return responder('Falta el nombre del cliente (va en la primera línea).\n\n' + AYUDA_TACH);
+
+    const previa = getLicenciaTach(nombre, cod.codigo);
+    let clave;
+    if (previa) {
+      clave = previa.clave;
+      await responder(`Ya estaba registrada el ${fechaCorta(previa.fecha)} — te reenvío la misma clave.`);
+    } else {
+      clave = licT.generarClave(nombre, cod.codigo);
+      insertLicenciaTach({ cliente: nombre, codigo: cod.codigo, clave });
+      console.log(`🔑 Clave optiTACH emitida: ${nombre} — ${cod.codigo}`);
+    }
+    await responder(clave);
+    await responder(licT.mensajeCliente(nombre, cod.codigo, clave));
+  } catch (err) {
+    console.error('❌ Error en comando de tach:', err.message);
     await responder(`⚠️ No se generó la clave: ${err.message}`);
   }
 }
