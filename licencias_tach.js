@@ -63,21 +63,34 @@ function llavePublicaDesdeRaw(b64) {
 }
 
 function cargarPrivada() {
-  let pem = (process.env.OPTITACH_PRIVATE_KEY || '').trim();
-  if (!pem) throw new Error('Falta la variable OPTITACH_PRIVATE_KEY en Railway.');
-  if (!pem.includes('BEGIN')) pem = Buffer.from(pem, 'base64').toString('utf8'); // venía en base64
-  pem = pem.replace(/\\n/g, '\n');
-  if (/BEGIN [A-Z ]*PUBLIC KEY/.test(pem)) {
-    throw new Error('OPTITACH_PRIVATE_KEY tiene la llave PÚBLICA. Hay que pegar el contenido de llave_privada_tach.pem.');
+  let txt = (process.env.OPTITACH_PRIVATE_KEY || '').trim();
+  if (!txt) throw new Error('Falta la variable OPTITACH_PRIVATE_KEY en Railway.');
+  txt = txt.replace(/\\n/g, '\n');
+  if (/BEGIN [A-Z ]*PUBLIC KEY/.test(txt)) {
+    throw new Error('OPTITACH_PRIVATE_KEY tiene la llave PÚBLICA. Hay que pegar la llave privada (llave_privada_tach.pem).');
   }
-  // Railway a veces convierte los saltos de línea en espacios: se rearma el PEM desde el cuerpo base64.
-  const m = pem.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
-  if (!m) throw new Error('OPTITACH_PRIVATE_KEY no tiene formato PEM (falta BEGIN/END PRIVATE KEY).');
-  const cuerpo = m[2].replace(/\s+/g, '');
-  pem = `-----BEGIN ${m[1]}-----\n${cuerpo.match(/.{1,64}/g).join('\n')}\n-----END ${m[1]}-----\n`;
   let priv;
-  try { priv = crypto.createPrivateKey(pem); }
-  catch (err) { throw new Error('OPTITACH_PRIVATE_KEY no se pudo leer (¿está completa y es la privada de optiTACH?).'); }
+  try {
+    if (txt.includes('BEGIN')) {
+      // PEM completo. Railway a veces convierte los saltos de línea en espacios: se rearma desde el cuerpo.
+      const m = txt.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+      if (!m) throw new Error('pem');
+      const cuerpo = m[2].replace(/\s+/g, '');
+      priv = crypto.createPrivateKey(`-----BEGIN ${m[1]}-----\n${cuerpo.match(/.{1,64}/g).join('\n')}\n-----END ${m[1]}-----\n`);
+    } else {
+      // Sin BEGIN: base64 del PEM completo, o solo el cuerpo (la línea larga del .pem = base64 del DER).
+      const raw = Buffer.from(txt.replace(/\s+/g, ''), 'base64');
+      const comoTexto = raw.toString('utf8');
+      if (comoTexto.includes('BEGIN')) {
+        const cuerpo = comoTexto.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+        priv = crypto.createPrivateKey(`-----BEGIN PRIVATE KEY-----\n${cuerpo.match(/.{1,64}/g).join('\n')}\n-----END PRIVATE KEY-----\n`);
+      } else {
+        priv = crypto.createPrivateKey({ key: raw, format: 'der', type: 'pkcs8' });
+      }
+    }
+  } catch (err) {
+    throw new Error('OPTITACH_PRIVATE_KEY no se pudo leer: debe ser la llave PRIVADA de optiTACH, completa (el contenido de llave_privada_tach.pem).');
+  }
   if (priv.asymmetricKeyType !== 'ed25519') throw new Error('OPTITACH_PRIVATE_KEY no es una llave Ed25519.');
   return priv;
 }
