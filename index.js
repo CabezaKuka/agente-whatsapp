@@ -141,6 +141,35 @@ try {
 // Palabras que indican consulta por el software (incluye la nota del anuncio).
 const REGEX_OPTIMAX = /opti-?max|gmsoftware|nesting|\bdxf\b|fast ?cam|(mesa|corte|cortadora|m[aá]quina)( de| por)? plasma|plasma cnc|desarrollos? de chapa|(programa|software) (de|para) (corte|cortar|nesting|chapa|plasma)|\bsoftware\b|\bprograma\b/i;
 
+// ── optiTACH — app Android (tacómetro óptico) ─────────────────────────────
+// Se detecta por la palabra optiTACH o "tacómetro" (incluye la nota del anuncio).
+// El primer mensaje genérico (el precargado del anuncio) se responde por código
+// con GANCHO_OPTITACH, sin llamar al modelo. Para el resto de la conversación,
+// el número queda con el flag 'optitach' y el prompt suma OPTITACH_PROMPT.
+const REGEX_OPTITACH = /opti-?tach|tac[oó]metro/i;
+const OPTITACH_APK = 'https://github.com/CabezaKuka/optitach/releases/latest/download/optiTACH.apk';
+
+const GANCHO_OPTITACH = `Hola 👋 optiTACH es un tacómetro óptico: mide las RPM con la cámara del celular. La app completa cuesta 70 Bs y podés probar la demo gratis, que mide hasta 1000 rpm: ${OPTITACH_APK}
+
+⚠️ Es solo para Android. Como se instala desde un archivo APK y no desde Play Store, Android va a mostrar avisos de seguridad y te va a pedir permitir instalar desde fuentes desconocidas. Es normal.
+
+¿Qué querés medir con el tacómetro?`;
+
+const OPTITACH_PROMPT = `
+
+APP optiTACH — este cliente consulta (o consultó) por optiTACH. Cuando la consulta sea sobre optiTACH, estas reglas tienen PRIORIDAD sobre todas las anteriores:
+- optiTACH es una app para Android que funciona como tacómetro óptico: mide las RPM usando la cámara del celular. Es solo para Android (si pregunta por iPhone, decile que es solo para Android). Respondé solo con lo que figura en esta sección; si algo no figura, no lo supongas ni lo inventes.
+- PRECIO: la app completa cuesta 70 Bs.
+- DEMO: es gratis y mide hasta 1000 rpm. Link de descarga: ${OPTITACH_APK} — si ya lo mandaste en esta conversación, no lo repitas salvo que el cliente lo pida.
+- DEMO VS APP COMPLETA: la única diferencia es el límite de 1000 rpm de la demo; la app completa no tiene ese límite. Todo lo demás es igual.
+- RPM MÁXIMAS: en la app completa el límite lo determina la cámara del celular: puede ser 2800 rpm o 5600 rpm según el modelo de teléfono. La app informa cuál es el de su teléfono al instalar la demo. Si pregunta hasta cuántas rpm mide, o si su celular sirve, explicale eso y sugerile instalar la demo para ver el límite de su teléfono. No des otro número ni digas qué modelos tienen 2800 o 5600.
+- INSTALACIÓN: se instala desde un archivo APK, no desde Play Store. Android muestra avisos de seguridad y pide permitir instalar desde fuentes desconocidas. Si el cliente pregunta por la instalación o duda por esos avisos, explicalo con calma y decile que es normal.
+- COMPRA: si quiere comprar la app completa, respondé que sí y que se van a poner en contacto con él desde el 76317951 para pasarle la forma de pago, y agregá [LEAD_CALIENTE]. No inventes formas de pago ni plazos.
+- LARGO: hasta 3 líneas por mensaje, texto corrido, sin guiones ni listas.
+- No apliques MODO CIERRE: no hay envíos ni cantidades, no preguntes ciudad. No uses palabras clave [FOLLETO_...] para optiTACH.
+- Si pregunta algo que no figura en esta sección (precisión, compatibilidad con un modelo de celular, funciones, etc.), no inventes: respondé "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)." y agregá [DERIVACION].
+- No ofrezcas otros productos de la empresa a quien pregunta por optiTACH, salvo que él los pregunte.`;
+
 const FOLLETOS = {
   clasificadora: 'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/CG3-CG3E.png',
   mh5_1:         'https://raw.githubusercontent.com/CabezaKuka/agente-whatsapp/main/MH5-1.png',
@@ -244,7 +273,7 @@ SOFTWARE optiMAX — este cliente consulta (o consultó) por optiMAX. Cuando la 
 - No ofrezcas productos de la fábrica (equipos agrícolas, HiWIFI, nivel) a quien pregunta por optiMAX, salvo que él los pregunte.
 - CLAVE Y GARANTÍA: si pregunta por garantía, confianza, si le llega la clave o cuánto tarda, respondé SIEMPRE en el mismo mensaje con el plazo (dentro de 2 horas entre las 07:00 y las 22:00 hora de Bolivia; fuera de ese horario, al día siguiente) y la garantía (si no llega, se devuelve el pago). En esa respuesta NO digas que no hay devoluciones.
 BASE optiMAX:
-${OPTIMAX_KB}` : ''}`;
+${OPTIMAX_KB}` : ''}${(from && tieneFlag(from, 'optitach')) ? OPTITACH_PROMPT : ''}`;
 }
 const conversaciones = {};
 
@@ -1185,13 +1214,46 @@ async function procesarMensajes(from) {
       console.error(`❌ Error en gancho Termómetro WiFi de ${from} (sigue flujo normal):`, err.message);
     }
 
+    // ── optiTACH: marcar el número y responder el primer mensaje por código ──
+    // Si es el saludo genérico (el mensaje precargado del anuncio) se manda
+    // GANCHO_OPTITACH sin llamar al modelo, una sola vez por número. Si el
+    // cliente ya trae una pregunta concreta, sigue el flujo normal con el
+    // modelo, que ya tiene el bloque optiTACH en el prompt (flag 'optitach').
+    try {
+      if (REGEX_OPTITACH.test(textoCombinado)) {
+        if (!tieneFlag(from, 'optitach')) {
+          marcarFlag(from, 'optitach');
+          console.log(`📱 Consulta optiTACH detectada para ${from}`);
+        }
+        const textoClienteTach = textoCombinado.replace(/^\[Contexto interno:[^\]]*\]\s*/i, '').trim();
+        const saludoGenericoTach = !textoClienteTach.includes('?') && textoClienteTach.length <= 80;
+        if (saludoGenericoTach && !tieneFlag(from, 'gancho_optitach')) {
+          marcarFlag(from, 'gancho_optitach');
+          console.log(`📱 Gancho fijo optiTACH para ${from}`);
+          conversaciones[from].push({ role: 'user', content: textoCombinado });
+          conversaciones[from].push({ role: 'assistant', content: GANCHO_OPTITACH });
+          truncateConversation(from);
+          const result = await enviarMensaje(from, GANCHO_OPTITACH);
+          saveOutgoing({ waId: from, text: GANCHO_OPTITACH, metaMessageId: extractMetaMessageId(result), status: 'sent' });
+          return;
+        }
+      }
+    } catch (err) {
+      console.error(`❌ Error en gancho optiTACH de ${from} (sigue flujo normal):`, err.message);
+    }
+
     conversaciones[from].push({ role: 'user', content: textoCombinado });
     truncateConversation(from);
 
     // ── optiMAX: marcar el número la primera vez que consulta por el software
     // (incluye la nota de anuncio). Desde ahí el prompt suma la base optiMAX.
+    // Si el número ya consulta por optiTACH, se exige una palabra explícita de
+    // optiMAX: "software" o "programa" solos no alcanzan (evita mezclar bases).
     try {
-      if (OPTIMAX_KB && !tieneFlag(from, 'optimax') && REGEX_OPTIMAX.test(textoCombinado)) {
+      const detectaOptimax = tieneFlag(from, 'optitach')
+        ? /opti-?max|gmsoftware|nesting|\bdxf\b/i.test(textoCombinado)
+        : REGEX_OPTIMAX.test(textoCombinado);
+      if (OPTIMAX_KB && !tieneFlag(from, 'optimax') && detectaOptimax) {
         marcarFlag(from, 'optimax');
         console.log(`💻 Consulta optiMAX detectada para ${from}`);
       }
@@ -1228,7 +1290,7 @@ async function procesarMensajes(from) {
       }
 
       const esOptimax = tieneFlag(from, 'optimax');
-      const etiqueta = esOptimax ? ' optiMAX' : '';
+      const etiqueta = esOptimax ? ' optiMAX' : (tieneFlag(from, 'optitach') ? ' optiTACH' : '');
       const pareceCotizacion = /cotiza|presupuesto|\bfactura\b|quiero comprar|hacer (el )?pedido/i.test(textoCombinado)
         || (esOptimax && /ya pagu[eé]|comprobante|\btxid\b|licencia pro|clave pro/i.test(textoCombinado));
       if ((pideMarcador || pareceCotizacion) && !tieneFlag(from, 'lead_avisado')) {
