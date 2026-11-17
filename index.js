@@ -968,6 +968,8 @@ app.post('/webhook', async (req, res) => {
 
         for (const st of statuses) {
           if (st?.id && st?.status) updateStatus(st.id, st.status);
+          // Registrar el motivo cuando Meta no pudo entregar un mensaje (incluye avisos al dueño)
+          if (st?.status === 'failed') console.error(`❌ Meta no entregó el mensaje ${st.id} a ${st.recipient_id}:`, JSON.stringify(st.errors || []));
         }
 
         for (const msg of messages) {
@@ -1285,7 +1287,7 @@ async function procesarMensajes(from) {
       const pideContactarMarcador = reply.includes('[CONTACTAR]');
       if (pideContactarMarcador) reply = reply.replace('[CONTACTAR]', '').trim();
       const pideContactar = pideContactarMarcador
-        || (/76317951/.test(reply) && /(van|vamos) a (contactar|poner en contacto)/i.test(reply));
+        || /(van|vamos) a (contactar|poner en contacto)|te contactar[eaá]|te contactamos|nos pon(dr)?emos en contacto/i.test(reply);
 
       // Si el bot detectó cierre de conversación, guardar en DB sin enviar nada al cliente
       const pideCierre = reply.includes('[CIERRE]');
@@ -1305,7 +1307,7 @@ async function procesarMensajes(from) {
         marcarFlag(from, 'lead_avisado');
         const nombreContacto = contactName ? `${contactName} — ` : '';
         const avisoTexto = `🔥 Lead caliente${etiqueta}: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
-        try { await enviarMensaje(NOTIFICAR_A, avisoTexto); } catch (err) { console.error('❌ Error notificando lead caliente:', err.message); }
+        try { const rA = await enviarMensaje(NOTIFICAR_A, avisoTexto); console.log(`🔔 Aviso lead caliente enviado a ${NOTIFICAR_A} — id ${extractMetaMessageId(rA)}`); } catch (err) { console.error('❌ Error notificando lead caliente:', err.message); }
       }
 
       // Notificación de derivación — doble seguridad:
@@ -1321,11 +1323,11 @@ async function procesarMensajes(from) {
           .map(m => `• ${m.content}`)
           .join('\n');
         const avisoContactar = `📞 CONTACTAR desde el 76317951${etiqueta}: ${nombreContacto}+${from}\nEl bot le prometió que lo contactan para coordinar la compra.\nÚltimos mensajes del cliente:\n${ultimosCliente || `• ${textoCombinado}`}`;
-        try { await enviarMensaje(NOTIFICAR_A, avisoContactar); } catch (err) { console.error('❌ Error notificando contacto pendiente:', err.message); }
+        try { const rA = await enviarMensaje(NOTIFICAR_A, avisoContactar); console.log(`🔔 Aviso CONTACTAR enviado a ${NOTIFICAR_A} — id ${extractMetaMessageId(rA)}`); } catch (err) { console.error('❌ Error notificando contacto pendiente:', err.message); }
       } else if (pideDerivacion || pareceDerivacion) {
         const nombreContacto = contactName ? `${contactName} — ` : '';
         const avisoDerivacion = `↗️ Derivación${etiqueta}: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
-        try { await enviarMensaje(NOTIFICAR_A, avisoDerivacion); } catch (err) { console.error('❌ Error notificando derivación:', err.message); }
+        try { const rA = await enviarMensaje(NOTIFICAR_A, avisoDerivacion); console.log(`🔔 Aviso derivación enviado a ${NOTIFICAR_A} — id ${extractMetaMessageId(rA)}`); } catch (err) { console.error('❌ Error notificando derivación:', err.message); }
       }
     } catch (err) { console.error('❌ Error en aviso de lead caliente (no afecta la respuesta al cliente):', err.message); }
 
