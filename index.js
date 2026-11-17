@@ -211,10 +211,10 @@ Si el cliente pregunta poco, respondés con lo más relevante. Si profundiza, pr
 Si el cliente saluda, saludás y preguntás en qué podés ayudar, sin presentarte.
 CONSULTA SIN PRODUCTO: si el cliente pide información o dice que quiere saber más, pero NO hay [Contexto interno: ...] de anuncio y ni él ni la conversación nombraron un producto, respondé con este texto: "Hola 👋 ¿Sobre qué te gustaría saber más? Tenemos el software de nesting optiMAX, monitores de temperatura HiWIFI, clasificadoras de granos, zarandas manuales y otros equipos." Esta regla tiene prioridad sobre los ganchos de primer contacto de cada producto (HiWIFI, TempWIFI, Logger, multi-producto), que se usan solo cuando el anuncio o el cliente ya indicaron ese producto. Después respondé según el producto que elija, con las reglas de ese producto.
 VENDER DESPUÉS DE RESPONDER: cuando el cliente hace una pregunta técnica (material, medidas, rango, alimentación, etc.), primero respondé el dato concreto tal como está en el catálogo, y en la misma respuesta agregá un beneficio breve relacionado con ese dato, cerrando con una pregunta que haga avanzar la venta — no una que vuelva a calificar desde cero. Ejemplo: "¿sirve para cámara fría?" → "Sí, mide dentro del rango de tu cámara y te avisa al toque si la temperatura se sale de lo normal. ¿De qué tamaño es tu cámara?". Siempre dentro del límite de 2 líneas.
-MODO CIERRE (si es por planchas perforadas, NO preguntes ciudad de envío porque no se envían — preguntá solo cantidad y medida): apenas el cliente muestre intención de compra (dice que quiere comprar, pide cotización o presupuesto, pregunta por envío a su ciudad, menciona cantidades, pide el juego completo), dejá de describir el producto y pasá a concretar: preguntá a qué ciudad sería el envío y cuántas unidades necesita (una o dos preguntas por mensaje, no un interrogatorio). Cuando ya tengas ciudad o cantidad, indicá "Para concretar el pedido escribí al 76317951 (Solo WhatsApp)." y agregá [DERIVACION] al final de tu respuesta.
+MODO CIERRE (si es por planchas perforadas, NO preguntes ciudad de envío porque no se envían — preguntá solo cantidad y medida): apenas el cliente muestre intención de compra (dice que quiere comprar, pide cotización o presupuesto, pregunta por envío a su ciudad, menciona cantidades, pide el juego completo), dejá de describir el producto y pasá a concretar: preguntá a qué ciudad sería el envío y cuántas unidades necesita (una o dos preguntas por mensaje, no un interrogatorio). Cuando ya tengas ciudad o cantidad, indicá "Listo, te van a contactar desde el 76317951 para coordinar el pedido." y agregá [CONTACTAR] al final de tu respuesta. En este caso NO le pidas al cliente que escriba a ningún número ni uses [DERIVACION]: es la empresa la que lo contacta.
 Si el cliente pide directamente hablar con una persona, ahí sí derivá con "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)." sin más preguntas, y agregá [DERIVACION] al final de tu respuesta.
 CUÁNDO RESPONDER Y CUÁNDO DERIVAR: respondé directamente mientras las preguntas tengan respuesta literal y objetiva en el catálogo o en la información del negocio (precio, características, alimentación, conectividad, medidas, materiales, envíos, horarios, ubicación). Derivá con "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)." y agregá [DERIVACION] al final de tu respuesta cuando ocurra cualquiera de estas situaciones: el cliente describe una aplicación particular que no está documentada en el catálogo, la consulta requiere asesoramiento técnico personalizado, el mensaje sigue siendo ambiguo después de una pregunta aclaratoria, o el cliente hace varias preguntas sobre su caso particular cuya respuesta no puede obtenerse directamente del catálogo (si las preguntas tienen respuesta objetiva en el catálogo, respondelas todas aunque sean varias). Ante la duda entre responder o derivar, derivá — es preferible una derivación correcta que una respuesta inventada o basada en una interpretación incierta.
-REGLA GLOBAL DE DERIVACIÓN: cada vez que le indiques al cliente que escriba al 76317951, agregá [DERIVACION] al final de tu respuesta. Usá la frase de MODO CIERRE únicamente cuando la derivación sea para concretar una compra ya definida (ciudad o cantidad confirmada). En cualquier otro motivo de derivación —asesoramiento, ambigüedad, aplicación particular, información inexistente en el catálogo, falta de stock, o el cliente pide hablar con una persona— identificáte siempre como asistente virtual con la frase "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)."
+REGLA GLOBAL DE DERIVACIÓN: hay dos casos distintos y no se mezclan. CASO COMPRA — para concretar una compra ya definida (ciudad o cantidad confirmada) usá únicamente la frase de MODO CIERRE con [CONTACTAR]: la empresa contacta al cliente desde el 76317951, el cliente NO tiene que escribir. CASO CONSULTA — cada vez que le indiques al cliente que escriba al 76317951, agregá [DERIVACION] al final de tu respuesta. En cualquier otro motivo de derivación —asesoramiento, ambigüedad, aplicación particular, información inexistente en el catálogo, falta de stock, o el cliente pide hablar con una persona— identificáte siempre como asistente virtual con la frase "Soy un asistente virtual — para asesorarte mejor en tu caso específico escribí al 76317951 (Solo WhatsApp)."
 CIERRE DE CONVERSACIÓN — cuando el cliente manda un mensaje de cierre sin pregunta nueva ("gracias", "ok", "perfecto", "de nada", "hasta luego", "nos vemos", "ok gracias", "muchas gracias", "buenas", o similares), NO respondas nada al cliente pero agregá [CIERRE] al final de tu respuesta interna. Esto aplica aunque sea el único mensaje del cliente. Si el mensaje de cierre incluye una pregunta nueva, respondé la pregunta normalmente sin usar [CIERRE].
 LEAD CALIENTE — aviso interno (no se lo mencionás al cliente): agregá [LEAD_CALIENTE] al final de tu respuesta apenas el cliente use la palabra cotización, cotizar, presupuesto, o factura, o diga explícitamente que quiere comprar o hacer el pedido — ESE PRIMER MENSAJE YA CUENTA, no esperes a que confirme cantidad ni ningún otro dato para agregarlo. También agregalo si menciona una cantidad de unidades (2 o más). Va ADEMÁS de tu respuesta normal al cliente, nunca en su lugar, y el cliente nunca debe ver esa palabra. No la uses para preguntas técnicas generales ni curiosidad sin esas palabras o intención de compra explícita.
 SOLO usás info del catálogo y la información del negocio. Si un producto no está en el catálogo, no inventés precio ni características — decí que vas a consultar y que escriban al 76317951 (Solo WhatsAPP).
@@ -1279,6 +1279,14 @@ async function procesarMensajes(from) {
       const pideDerivacion = reply.includes('[DERIVACION]');
       if (pideDerivacion) reply = reply.replace('[DERIVACION]', '').trim();
 
+      // [CONTACTAR]: compra definida — la empresa contacta al cliente desde el 76317951
+      // (el cliente NO escribe). Doble seguridad: también se detecta por la frase,
+      // por si el modelo olvidó el marcador.
+      const pideContactarMarcador = reply.includes('[CONTACTAR]');
+      if (pideContactarMarcador) reply = reply.replace('[CONTACTAR]', '').trim();
+      const pideContactar = pideContactarMarcador
+        || (/76317951/.test(reply) && /(van|vamos) a (contactar|poner en contacto)/i.test(reply));
+
       // Si el bot detectó cierre de conversación, guardar en DB sin enviar nada al cliente
       const pideCierre = reply.includes('[CIERRE]');
       if (pideCierre) {
@@ -1304,7 +1312,17 @@ async function procesarMensajes(from) {
       // 1) el modelo puso [DERIVACION], o
       // 2) la respuesta contiene 76317951 o 77626675 (ventas optiMAX), por si el modelo olvidó el marcador
       const pareceDerivacion = /76317951|77626675/.test(reply);
-      if (pideDerivacion || pareceDerivacion) {
+      if (pideContactar) {
+        // Aviso distinto al de derivación: acá el cliente queda esperando que lo contacten.
+        const nombreContacto = contactName ? `${contactName} — ` : '';
+        const ultimosCliente = (conversaciones[from] || [])
+          .filter(m => m.role === 'user' && typeof m.content === 'string')
+          .slice(-3)
+          .map(m => `• ${m.content}`)
+          .join('\n');
+        const avisoContactar = `📞 CONTACTAR desde el 76317951${etiqueta}: ${nombreContacto}+${from}\nEl bot le prometió que lo contactan para coordinar la compra.\nÚltimos mensajes del cliente:\n${ultimosCliente || `• ${textoCombinado}`}`;
+        try { await enviarMensaje(NOTIFICAR_A, avisoContactar); } catch (err) { console.error('❌ Error notificando contacto pendiente:', err.message); }
+      } else if (pideDerivacion || pareceDerivacion) {
         const nombreContacto = contactName ? `${contactName} — ` : '';
         const avisoDerivacion = `↗️ Derivación${etiqueta}: ${nombreContacto}+${from}\nÚltimo mensaje: "${textoCombinado}"`;
         try { await enviarMensaje(NOTIFICAR_A, avisoDerivacion); } catch (err) { console.error('❌ Error notificando derivación:', err.message); }
