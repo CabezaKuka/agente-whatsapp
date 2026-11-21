@@ -463,6 +463,10 @@ app.get('/inbox', (req, res) => {
         </select>
         <button type="submit">📥 Exportar</button>
       </form>
+      <form class="export-form" method="get" action="/admin/buscar">
+        <input name="q" placeholder="tema (ej: wifi)" required style="border:none;border-radius:6px;padding:6px 8px;font-size:12px;width:130px"/>
+        <button type="submit">🔎 Teléfonos CSV</button>
+      </form>
       <a href="/admin">⚙️ Catálogo</a>
     </div>
   </div>
@@ -573,6 +577,71 @@ app.get('/admin/exportar', (req, res) => {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
   res.send(out);
+});
+
+// ── BUSCAR POR TEMA → CSV de teléfonos (para retargeting) ─────────────────
+// /admin/buscar?q=wifi            → todo el historial
+// /admin/buscar?q=hiwifi,coldwifi → varias frases separadas por coma (OR)
+// Busca en TODOS los mensajes guardados (cliente, bot y contexto de anuncio),
+// sin distinguir mayúsculas ni tildes. Una fila por teléfono, con el primer
+// fragmento que coincidió (prioriza lo que escribió el cliente).
+// Solo lee la base; no modifica nada.
+function normalizarConMapa(texto) {
+  // Devuelve el texto en minúsculas y sin tildes, y para cada posición del
+  // texto normalizado, la posición correspondiente en el original.
+  let norm = '';
+  const mapa = [];
+  for (let i = 0; i < texto.length; i++) {
+    const n = texto[i].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    for (let k = 0; k < n.length; k++) { norm += n[k]; mapa.push(i); }
+  }
+  return { norm, mapa };
+}
+
+app.get('/admin/buscar', (req, res) => {
+  const terminos = String(req.query.q || '')
+    .split(',')
+    .map(t => normalizarConMapa(t.trim()).norm)
+    .filter(t => t.length >= 2);
+  if (!terminos.length) return res.status(400).send('Falta el parámetro q (ej: /admin/buscar?q=wifi)');
+
+  const filas = getMessagesDesde('1970-01-01T00:00:00.000Z');
+  const porTel = {}; // wa_id → { fragmento, origen, fecha }
+
+  for (const m of filas) {
+    if (m.wa_id === NOTIFICAR_A) continue; // el número del dueño no va a la lista
+    const original = m.text || '';
+    if (!original) continue;
+    const { norm, mapa } = normalizarConMapa(original);
+    let pos = -1, largo = 0;
+    for (const t of terminos) {
+      const p = norm.indexOf(t);
+      if (p !== -1 && (pos === -1 || p < pos)) { pos = p; largo = t.length; }
+    }
+    if (pos === -1) continue;
+
+    const previo = porTel[m.wa_id];
+    // Ya hay coincidencia del cliente, o ya hay una del bot y esta también es del bot → no reemplazar
+    if (previo && (previo.origen === 'cliente' || m.direction !== 'in')) continue;
+
+    const ini = Math.max(0, mapa[pos] - 60);
+    const fin = Math.min(original.length, mapa[pos + largo - 1] + 1 + 60);
+    const fragmento = (ini > 0 ? '…' : '') + original.slice(ini, fin).replace(/\s+/g, ' ').trim() + (fin < original.length ? '…' : '');
+    porTel[m.wa_id] = { fragmento, origen: m.direction === 'in' ? 'cliente' : 'bot', fecha: m.created_at };
+  }
+
+  const esc = s => `"${String(s || '').replace(/"/g, '""')}"`;
+  const lineas = ['telefono,fragmento'];
+  for (const [waId, r] of Object.entries(porTel)) {
+    lineas.push(`+${waId},${esc(`[${r.origen} ${toGMTMinus4(r.fecha).fecha}] ${r.fragmento}`)}`);
+  }
+
+  const slug = terminos.join('_').replace(/[^a-z0-9_]+/g, '').slice(0, 40) || 'busqueda';
+  const nombreArchivo = `telefonos_${slug}_${toGMTMinus4(new Date().toISOString()).fecha}.csv`;
+  console.log(`🔎 Búsqueda "${terminos.join(', ')}": ${lineas.length - 1} teléfonos`);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+  res.send('﻿' + lineas.join('\n')); // BOM para que Excel lea bien las tildes
 });
 
 // ── CHAT INDIVIDUAL ───────────────────────────────────────────────────────
