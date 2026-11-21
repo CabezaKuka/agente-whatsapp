@@ -465,6 +465,8 @@ app.get('/inbox', (req, res) => {
       </form>
       <form class="export-form" method="get" action="/admin/buscar">
         <input name="q" placeholder="tema (ej: wifi)" required style="border:none;border-radius:6px;padding:6px 8px;font-size:12px;width:130px"/>
+        <input type="date" name="desde" title="Desde (vacío = desde el inicio)" style="border:none;border-radius:6px;padding:5px 6px;font-size:12px"/>
+        <input type="date" name="hasta" title="Hasta (vacío = hoy)" style="border:none;border-radius:6px;padding:5px 6px;font-size:12px"/>
         <button type="submit">🔎 Teléfonos CSV</button>
       </form>
       <a href="/admin">⚙️ Catálogo</a>
@@ -580,22 +582,34 @@ app.get('/admin/exportar', (req, res) => {
 });
 
 // ── BUSCAR POR TEMA → CSV de teléfonos (para retargeting) ─────────────────
-// /admin/buscar?q=wifi            → todo el historial
-// /admin/buscar?q=hiwifi,coldwifi → varias frases separadas por coma (OR)
+// /admin/buscar?q=wifi                                  → todo el historial
+// /admin/buscar?q=hiwifi,coldwifi&desde=2026-09-01&hasta=2026-10-31
+// q: varias frases separadas por coma (OR). desde/hasta: opcionales, AAAA-MM-DD,
+// hora Bolivia, ambos días incluidos.
 // Busca en TODOS los mensajes guardados (cliente, bot y contexto de anuncio),
-// sin distinguir mayúsculas ni tildes. Una fila por teléfono, con el primer
-// fragmento que coincidió (prioriza lo que escribió el cliente).
+// sin distinguir mayúsculas ni tildes. Una fila por teléfono con el primer
+// fragmento que coincidió dentro del rango (prioriza lo que escribió el
+// cliente). Ordenado por fecha, lo más reciente primero.
 // Solo lee la base; no modifica nada.
+const EXCLUIR_DE_BUSQUEDA = new Set([NOTIFICAR_A, '59176317951']); // números propios
+
 function normalizarConMapa(texto) {
   // Devuelve el texto en minúsculas y sin tildes, y para cada posición del
   // texto normalizado, la posición correspondiente en el original.
   let norm = '';
   const mapa = [];
   for (let i = 0; i < texto.length; i++) {
-    const n = texto[i].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const n = texto[i].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     for (let k = 0; k < n.length; k++) { norm += n[k]; mapa.push(i); }
   }
   return { norm, mapa };
+}
+
+// 'AAAA-MM-DD' (día en Bolivia, GMT-4) → ISO UTC del inicio de ese día. null si no es válida.
+function inicioDiaBoliviaIso(fecha) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha || ''))) return null;
+  const d = new Date(`${fecha}T00:00:00-04:00`);
+  return isNaN(d) ? null : d.toISOString();
 }
 
 app.get('/admin/buscar', (req, res) => {
@@ -605,11 +619,17 @@ app.get('/admin/buscar', (req, res) => {
     .filter(t => t.length >= 2);
   if (!terminos.length) return res.status(400).send('Falta el parámetro q (ej: /admin/buscar?q=wifi)');
 
-  const filas = getMessagesDesde('1970-01-01T00:00:00.000Z');
+  const desdeIso = inicioDiaBoliviaIso(req.query.desde) || '1970-01-01T00:00:00.000Z';
+  const hastaIni = inicioDiaBoliviaIso(req.query.hasta);
+  // "hasta" incluye todo ese día: límite = inicio del día siguiente (exclusivo)
+  const hastaIso = hastaIni ? new Date(new Date(hastaIni).getTime() + 24 * 60 * 60 * 1000).toISOString() : null;
+
+  const filas = getMessagesDesde(desdeIso);
   const porTel = {}; // wa_id → { fragmento, origen, fecha }
 
   for (const m of filas) {
-    if (m.wa_id === NOTIFICAR_A) continue; // el número del dueño no va a la lista
+    if (EXCLUIR_DE_BUSQUEDA.has(m.wa_id)) continue;
+    if (hastaIso && m.created_at >= hastaIso) continue;
     const original = m.text || '';
     if (!original) continue;
     const { norm, mapa } = normalizarConMapa(original);
@@ -630,15 +650,20 @@ app.get('/admin/buscar', (req, res) => {
     porTel[m.wa_id] = { fragmento, origen: m.direction === 'in' ? 'cliente' : 'bot', fecha: m.created_at };
   }
 
+  // Más reciente primero
+  const ordenados = Object.entries(porTel).sort((a, b) => b[1].fecha.localeCompare(a[1].fecha));
+
   const esc = s => `"${String(s || '').replace(/"/g, '""')}"`;
-  const lineas = ['telefono,fragmento'];
-  for (const [waId, r] of Object.entries(porTel)) {
-    lineas.push(`+${waId},${esc(`[${r.origen} ${toGMTMinus4(r.fecha).fecha}] ${r.fragmento}`)}`);
+  const lineas = ['telefono,fecha,hora,origen,fragmento'];
+  for (const [waId, r] of ordenados) {
+    const { fecha, hora } = toGMTMinus4(r.fecha);
+    lineas.push(`+${waId},${fecha},${hora},${r.origen},${esc(r.fragmento)}`);
   }
 
   const slug = terminos.join('_').replace(/[^a-z0-9_]+/g, '').slice(0, 40) || 'busqueda';
-  const nombreArchivo = `telefonos_${slug}_${toGMTMinus4(new Date().toISOString()).fecha}.csv`;
-  console.log(`🔎 Búsqueda "${terminos.join(', ')}": ${lineas.length - 1} teléfonos`);
+  const rango = (req.query.desde || req.query.hasta) ? `_${req.query.desde || 'inicio'}_a_${req.query.hasta || 'hoy'}` : '';
+  const nombreArchivo = `telefonos_${slug}${rango.replace(/[^0-9a-z_-]/gi, '')}.csv`;
+  console.log(`🔎 Búsqueda "${terminos.join(', ')}"${rango}: ${ordenados.length} teléfonos`);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
   res.send('﻿' + lineas.join('\n')); // BOM para que Excel lea bien las tildes
