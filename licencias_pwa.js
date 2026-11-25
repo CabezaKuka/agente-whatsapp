@@ -273,7 +273,8 @@ function crearServicio(almacen, { numeroBot }) {
     const cuenta = almacen.cuenta(numero);
     if (!cuenta) {
       ing.estado = 'sin_licencia';
-      return 'Este número de WhatsApp no tiene optiMAX PRO. Si ya pagaste, avisanos y la habilitamos; para comprarla: ' +
+      return 'Este número de WhatsApp no tiene optiMAX PRO. Si tenés WhatsApp y WhatsApp Business, mandá el mensaje ' +
+        'desde el número con el que compraste. Si ya pagaste, avisanos y la habilitamos; para comprarla: ' +
         `https://wa.me/${WHATSAPP_VENTAS}`;
     }
     const otra = almacen.cuentaDeEquipo(ing.codigo);
