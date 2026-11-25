@@ -51,6 +51,14 @@ function initDb() {
       codigo_tel TEXT NOT NULL,
       clave TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS licencias_pwa (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fecha TEXT NOT NULL,
+      cliente TEXT NOT NULL,
+      codigo_disp TEXT NOT NULL,
+      clave TEXT NOT NULL
+    );
   `);
 
   // Poblar catálogo solo si está vacío
@@ -227,6 +235,32 @@ function contarLicenciasTach() {
   return db.prepare('SELECT COUNT(*) as n FROM licencias_tach').get().n;
 }
 
+// ── LICENCIAS optiMAX PARA EL CELULAR (PWA; tabla aparte) ──
+function insertLicenciaPwa({ cliente, codigo, clave }) {
+  db.prepare(`
+    INSERT INTO licencias_pwa (fecha, cliente, codigo_disp, clave) VALUES (?, ?, ?, ?)
+  `).run(new Date().toISOString(), cliente, codigo, clave);
+}
+
+function getLicenciaPwa(cliente, codigo) {
+  return db.prepare(`
+    SELECT * FROM licencias_pwa WHERE cliente = ? AND codigo_disp = ? ORDER BY id DESC LIMIT 1
+  `).get(cliente, codigo);
+}
+
+function buscarLicenciasPwa(texto = '', limite = 10) {
+  const t = `%${String(texto).trim().toLowerCase()}%`;
+  return db.prepare(`
+    SELECT * FROM licencias_pwa
+    WHERE lower(cliente) LIKE ? OR lower(codigo_disp) LIKE ?
+    ORDER BY id DESC LIMIT ?
+  `).all(t, t, limite);
+}
+
+function contarLicenciasPwa() {
+  return db.prepare('SELECT COUNT(*) as n FROM licencias_pwa').get().n;
+}
+
 module.exports = {
   initDb,
   saveIncoming,
@@ -248,4 +282,8 @@ module.exports = {
   getLicenciaTach,
   buscarLicenciasTach,
   contarLicenciasTach,
+  insertLicenciaPwa,
+  getLicenciaPwa,
+  buscarLicenciasPwa,
+  contarLicenciasPwa,
 };
