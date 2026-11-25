@@ -22,9 +22,14 @@ const {
   getLicenciaTach,
   buscarLicenciasTach,
   contarLicenciasTach,
+  insertLicenciaPwa,
+  getLicenciaPwa,
+  buscarLicenciasPwa,
+  contarLicenciasPwa,
 } = require('./db');
 const lic = require('./licencias');
 const licT = require('./licencias_tach');
+const licP = require('./licencias_pwa');
 
 const app = express();
 app.use(bodyParser.json());
@@ -1152,6 +1157,12 @@ app.post('/webhook', async (req, res) => {
               continue;
             }
 
+            // ── COMANDOS DE CLAVES optiMAX PARA EL CELULAR (solo desde el número del dueño) ──
+            if (from === NOTIFICAR_A && /^\/pwas?(\s|$)/i.test(text.trim())) {
+              await manejarComandoPwa(text.trim());
+              continue;
+            }
+
             // ── CONTEXTO DE ANUNCIO (Click-to-WhatsApp) ──────────────────
             // Si el mensaje llega desde un anuncio de Facebook/Instagram, Meta
             // incluye msg.referral con el titular y texto del anuncio. Se
@@ -1614,6 +1625,61 @@ async function manejarComandoTach(texto) {
     await responder(`⚠️ No se generó la clave: ${err.message}`);
   }
 }
+
+// ── CLAVES optiMAX PARA EL CELULAR (PWA) POR WHATSAPP ────────────────────
+// /pwa Nombre del cliente 7K3Q-WXPM-2HDA  → genera (o reenvía) la clave (una por dispositivo)
+// /pwas [texto]  → busca ventas por cliente o código (vacío = últimas 10)
+const AYUDA_PWA = 'Uso:\n/pwa Nombre del cliente 7K3Q-WXPM-2HDA\n/pwas juan (buscar ventas)\n/pwas (últimas 10)';
+
+async function manejarComandoPwa(texto) {
+  const responder = async (t) => {
+    try { await enviarMensaje(NOTIFICAR_A, t); }
+    catch (err) { console.error('❌ Error respondiendo comando de pwa:', err.message); }
+  };
+  try {
+    const m = texto.match(/^\/(pwas?)(?:\s+([\s\S]*))?$/i);
+    const cmd = m[1].toLowerCase();
+    const resto = (m[2] || '').trim();
+
+    if (cmd === 'pwas') {
+      const filas = buscarLicenciasPwa(resto, 10);
+      if (!filas.length) return responder(resto ? `Sin ventas para «${resto}».` : 'Todavía no hay claves de optiMAX celular emitidas.');
+      const total = contarLicenciasPwa();
+      const lineas = filas.map(f => `${fechaCorta(f.fecha)} · ${f.cliente} · ${f.codigo_disp}`);
+      await responder(`🔑 Ventas optiMAX celular (${filas.length}${resto ? '' : ` de ${total}`}):\n` + lineas.join('\n'));
+      if (filas.length === 1) await responder(filas[0].clave);
+      else await responder('Para reenviar una clave: /pwa Nombre CODIGO');
+      return;
+    }
+
+    // /pwa
+    const cod = licP.extraerCodigo(resto);
+    if (!cod) return responder('No encontré el código del dispositivo (formato XXXX-XXXX-XXXX).\n\n' + AYUDA_PWA);
+    const primeraLinea = resto.split('\n')[0].replace(cod.raw, ' ');
+    const nombre = licP.normalizarNombre(primeraLinea).replace(/^[\s,;:|\-–—]+|[\s,;:|\-–—]+$/g, '');
+    if (!nombre) return responder('Falta el nombre del cliente (va en la primera línea).\n\n' + AYUDA_PWA);
+
+    const previa = getLicenciaPwa(nombre, cod.codigo);
+    let clave;
+    if (previa) {
+      clave = previa.clave;
+      await responder(`Ya estaba registrada el ${fechaCorta(previa.fecha)} — te reenvío la misma clave.`);
+    } else {
+      clave = licP.generarClave(nombre, cod.codigo);
+      insertLicenciaPwa({ cliente: nombre, codigo: cod.codigo, clave });
+      console.log(`🔑 Clave optiMAX celular emitida: ${nombre} — ${cod.codigo}`);
+    }
+    await responder(clave);
+    await responder(licP.mensajeCliente(nombre, cod.codigo, clave));
+  } catch (err) {
+    console.error('❌ Error en comando de pwa:', err.message);
+    await responder(`⚠️ No se generó la clave: ${err.message}`);
+  }
+}
+
+// La PWA pide acá, una sola vez, la llave del código PRO cifrado (con una clave válida para su dispositivo).
+app.options('/pwa/llave', licP.rutaLlave);
+app.post('/pwa/llave', licP.rutaLlave);
 
 // ── ENVIAR TEXTO ──────────────────────────────────────────────────────────
 async function enviarMensaje(para, texto) {
