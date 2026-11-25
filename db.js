@@ -52,12 +52,21 @@ function initDb() {
       clave TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS licencias_pwa (
+    -- optiMAX para el celular (PWA): la licencia es del número de WhatsApp (cuenta) y cada cuenta tiene sus
+    -- equipos activos (máx. licencias_pwa.TOPE_EQUIPOS). La tabla vieja licencias_pwa (clave por dispositivo)
+    -- ya no se usa.
+    CREATE TABLE IF NOT EXISTS pwa_cuentas (
+      numero TEXT PRIMARY KEY,
+      nombre TEXT NOT NULL,
+      fecha TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS pwa_equipos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      fecha TEXT NOT NULL,
-      cliente TEXT NOT NULL,
-      codigo_disp TEXT NOT NULL,
-      clave TEXT NOT NULL
+      numero TEXT NOT NULL,
+      codigo TEXT NOT NULL,
+      alta TEXT NOT NULL,
+      UNIQUE (numero, codigo)
     );
   `);
 
@@ -235,31 +244,47 @@ function contarLicenciasTach() {
   return db.prepare('SELECT COUNT(*) as n FROM licencias_tach').get().n;
 }
 
-// ── LICENCIAS optiMAX PARA EL CELULAR (PWA; tabla aparte) ──
-function insertLicenciaPwa({ cliente, codigo, clave }) {
-  db.prepare(`
-    INSERT INTO licencias_pwa (fecha, cliente, codigo_disp, clave) VALUES (?, ?, ?, ?)
-  `).run(new Date().toISOString(), cliente, codigo, clave);
-}
-
-function getLicenciaPwa(cliente, codigo) {
-  return db.prepare(`
-    SELECT * FROM licencias_pwa WHERE cliente = ? AND codigo_disp = ? ORDER BY id DESC LIMIT 1
-  `).get(cliente, codigo);
-}
-
-function buscarLicenciasPwa(texto = '', limite = 10) {
-  const t = `%${String(texto).trim().toLowerCase()}%`;
-  return db.prepare(`
-    SELECT * FROM licencias_pwa
-    WHERE lower(cliente) LIKE ? OR lower(codigo_disp) LIKE ?
-    ORDER BY id DESC LIMIT ?
-  `).all(t, t, limite);
-}
-
-function contarLicenciasPwa() {
-  return db.prepare('SELECT COUNT(*) as n FROM licencias_pwa').get().n;
-}
+// ── LICENCIAS optiMAX PARA EL CELULAR (PWA): cuentas por número y sus equipos ──
+// Mismas funciones que licencias_pwa.almacenMemoria() (las pruebas usan esa).
+const almacenPwa = {
+  guardarCuenta(numero, nombre) {
+    db.prepare(`
+      INSERT INTO pwa_cuentas (numero, nombre, fecha) VALUES (?, ?, ?)
+      ON CONFLICT(numero) DO UPDATE SET nombre = excluded.nombre
+    `).run(numero, nombre, new Date().toISOString());
+  },
+  cuenta(numero) {
+    return db.prepare('SELECT * FROM pwa_cuentas WHERE numero = ?').get(numero) || null;
+  },
+  quitarCuenta(numero) {
+    db.prepare('DELETE FROM pwa_equipos WHERE numero = ?').run(numero);
+    db.prepare('DELETE FROM pwa_cuentas WHERE numero = ?').run(numero);
+  },
+  buscarCuentas(texto = '', limite = 10) {
+    const t = `%${String(texto).trim().toLowerCase()}%`;
+    return db.prepare(`
+      SELECT * FROM pwa_cuentas WHERE lower(nombre) LIKE ? OR numero LIKE ? ORDER BY fecha DESC LIMIT ?
+    `).all(t, t, limite);
+  },
+  equipos(numero) {
+    return db.prepare('SELECT * FROM pwa_equipos WHERE numero = ? ORDER BY alta, id').all(numero);
+  },
+  agregarEquipo(numero, codigo) {
+    db.prepare(`
+      INSERT INTO pwa_equipos (numero, codigo, alta) VALUES (?, ?, ?)
+      ON CONFLICT(numero, codigo) DO UPDATE SET alta = excluded.alta
+    `).run(numero, codigo, new Date().toISOString());
+  },
+  quitarEquipo(numero, codigo) {
+    db.prepare('DELETE FROM pwa_equipos WHERE numero = ? AND codigo = ?').run(numero, codigo);
+  },
+  cuentaDeEquipo(codigo) {
+    return db.prepare('SELECT numero FROM pwa_equipos WHERE codigo = ? ORDER BY alta DESC LIMIT 1').get(codigo)?.numero || null;
+  },
+  contarCuentas() {
+    return db.prepare('SELECT COUNT(*) as n FROM pwa_cuentas').get().n;
+  },
+};
 
 module.exports = {
   initDb,
@@ -282,8 +307,5 @@ module.exports = {
   getLicenciaTach,
   buscarLicenciasTach,
   contarLicenciasTach,
-  insertLicenciaPwa,
-  getLicenciaPwa,
-  buscarLicenciasPwa,
-  contarLicenciasPwa,
+  almacenPwa,
 };
