@@ -12,6 +12,15 @@
 //   4. Al abrir con internet, la PWA pregunta POST /pwa/equipo {clave, codigo} → {activo, llave}. Si el equipo fue
 //      reemplazado (activo: false), vuelve a la DEMO. Sin internet sigue andando (sin plazo máximo, decisión de Max).
 //
+// Compra desde la app (26-nov, sin hablar con el cliente):
+//   a. El cliente pone su número de WhatsApp, elige cómo pagar, paga y toca «Ya pagué»: POST /pwa/compra
+//      {codigo, numero, metodo} → {orden: "OM-1048", token}. El bot le avisa al dueño (avisarOrden) con los botones
+//      Confirmar / Rechazar (o «/ok 1048», «/no 1048»).
+//   b. El dueño mira el banco o Binance y confirma: aprobar() crea la cuenta del número (si no la tenía) y le anota
+//      ese equipo, igual que «/pwa» + «Entrar con WhatsApp».
+//   c. La PWA consulta POST /pwa/compra/estado {token} → {estado: pendiente | aprobada (+ clave, llave, nombre) |
+//      rechazada | sin_licencia | desconocida}. Las órdenes quedan en la base (no vencen).
+//
 // Las claves tienen el mismo formato que las de optiMAX PC y optiTACH, con SU PROPIO par de llaves y prefijo OPWA1-,
 // y son EXACTAMENTE las mismas que genera herramientas/licencia_pwa.py del repo optimax-pwa-pro (Ed25519 es
 // determinístico: misma llave + mismos datos = misma firma).
@@ -198,11 +207,37 @@ function crearTope(maximo) {
     return v.length > maximo;
   };
 }
-const TOPES = { ingreso: 60, estado: 600, equipo: 120 };
+const TOPES = { ingreso: 60, estado: 600, equipo: 120, compra: 10, compraEstado: 600 };
+
+// ── compra desde la app ───────────────────────────────────────────────────
+// Formas de pago (las mismas que pago-config.js de la PWA; el precio va solo en el aviso al dueño).
+const METODOS_PAGO = {
+  qr: 'QR bancario · 250 Bs',
+  binance: 'Binance Pay · 20 USDT',
+  bep20: 'USDT BEP-20 · 20 USDT',
+  trc20: 'USDT TRC-20 · 20 USDT',
+};
+const PRIMERA_ORDEN = 1001;
+const textoOrden = (id) => `OM-${id}`;
+// «OM-1048», «om1048», «1048» → 1048 (o null)
+function idOrden(texto) {
+  const m = String(texto).match(/(?:om\s*-?\s*)?(\d{1,9})/i);
+  return m ? Number(m[1]) : null;
+}
+function tokenOrden() {
+  return crypto.randomBytes(12).toString('base64url');
+}
+// Aviso al dueño de una orden nueva (va con los botones Confirmar / Rechazar).
+function avisoOrden(o) {
+  const hora = new Date(new Date(o.creada).getTime() - 4 * 3600 * 1000).toISOString().slice(11, 16);   // Bolivia
+  return `🧾 Compra optiMAX Taller PRO\n\nOrden: ${textoOrden(o.id)}\nPago: ${METODOS_PAGO[o.metodo] || o.metodo}\n` +
+    `WhatsApp: ${numeroVisible(o.numero)}\nHora: ${hora}\n\nFijate que haya entrado el pago y confirmá. ` +
+    `Sin botones: /ok ${o.id} o /no ${o.id}`;
+}
 
 // ── almacén en memoria (pruebas). El bot usa el de db.js, con las mismas funciones. ──
 function almacenMemoria() {
-  const cuentas = new Map(), equipos = [];
+  const cuentas = new Map(), equipos = [], ordenes = [];
   let reloj = 0;                                          // orden de alta estable aunque dos altas caigan en el mismo ms
   return {
     guardarCuenta(numero, nombre) { cuentas.set(numero, { numero, nombre, fecha: new Date().toISOString() }); },
@@ -222,6 +257,23 @@ function almacenMemoria() {
       if (i >= 0) equipos.splice(i, 1);
     },
     cuentaDeEquipo: (codigo) => equipos.find((e) => e.codigo === codigo)?.numero || null,
+    // órdenes de compra: {id, token, codigo, numero, metodo, estado, creada, resuelta}
+    crearOrden(o) {
+      const orden = { ...o, id: PRIMERA_ORDEN + ordenes.length, estado: 'pendiente', creada: new Date().toISOString(), resuelta: null };
+      ordenes.push(orden);
+      return { ...orden };
+    },
+    orden: (id) => { const o = ordenes.find((x) => x.id === id); return o ? { ...o } : null; },
+    ordenPorToken: (token) => { const o = ordenes.find((x) => x.token === token); return o ? { ...o } : null; },
+    ordenPendiente: (codigo, numero, metodo) => {
+      const o = [...ordenes].reverse().find((x) => x.estado === 'pendiente' && x.codigo === codigo && x.numero === numero && x.metodo === metodo);
+      return o ? { ...o } : null;
+    },
+    resolverOrden(id, estado) {
+      const o = ordenes.find((x) => x.id === id);
+      if (o) { o.estado = estado; o.resuelta = new Date().toISOString(); }
+    },
+    ordenesPendientes: (limite = 10) => ordenes.filter((x) => x.estado === 'pendiente').slice(-limite).reverse().map((o) => ({ ...o })),
   };
 }
 
@@ -229,10 +281,11 @@ const fechaCorta = (iso) => { try { const d = new Date(iso); return `${String(d.
 
 /**
  * Servicio de licencias de la PWA. almacen: {guardarCuenta, cuenta, quitarCuenta, buscarCuentas, equipos,
- * agregarEquipo, quitarEquipo, cuentaDeEquipo} (db.js o almacenMemoria()). numeroBot: async () → número del bot
- * (a donde la PWA manda el mensaje de activación).
+ * agregarEquipo, quitarEquipo, cuentaDeEquipo, crearOrden, orden, ordenPorToken, ordenPendiente, resolverOrden,
+ * ordenesPendientes} (db.js o almacenMemoria()). numeroBot: async () → número del bot (a donde la PWA manda el
+ * mensaje de activación). avisarOrden: async (orden) → avisa al dueño de una compra nueva (errores: se registran).
  */
-function crearServicio(almacen, { numeroBot }) {
+function crearServicio(almacen, { numeroBot, avisarOrden = async () => {} }) {
   const ingresos = new Map();                    // token → {codigo, creado, estado, numero}
   const limpiar = (ahora = Date.now()) => {
     for (const [t, v] of ingresos) if (ahora - v.creado > VIDA_INGRESO_MS) ingresos.delete(t);
@@ -265,6 +318,21 @@ function crearServicio(almacen, { numeroBot }) {
   };
   const SIN_CONFIG = { error: 'El servidor de activación no está configurado. Avisá a ventas.' };
 
+  /** Anota el equipo en la cuenta del número (lo saca de otra cuenta si estaba; con más de TOPE_EQUIPOS sale el
+   *  más viejo). → {lista, reemplazado} */
+  function activarEquipo(numero, codigo) {
+    const otra = almacen.cuentaDeEquipo(codigo);
+    if (otra && otra !== numero) almacen.quitarEquipo(otra, codigo);   // el equipo pasa a esta cuenta
+    almacen.agregarEquipo(numero, codigo);
+    let lista = almacen.equipos(numero), reemplazado = null;
+    while (lista.length > TOPE_EQUIPOS) {
+      reemplazado = lista[0];
+      almacen.quitarEquipo(numero, lista[0].codigo);
+      lista = almacen.equipos(numero);
+    }
+    return { lista, reemplazado };
+  }
+
   /** El bot recibió el mensaje de activación desde «numero». Devuelve el texto de respuesta. */
   function recibirIngreso(numero, token) {
     limpiar();
@@ -277,15 +345,7 @@ function crearServicio(almacen, { numeroBot }) {
         'desde el número con el que compraste. Si ya pagaste, avisanos y la habilitamos; para comprarla: ' +
         `https://wa.me/${WHATSAPP_VENTAS}`;
     }
-    const otra = almacen.cuentaDeEquipo(ing.codigo);
-    if (otra && otra !== numero) almacen.quitarEquipo(otra, ing.codigo);   // el equipo pasa a esta cuenta
-    almacen.agregarEquipo(numero, ing.codigo);
-    let lista = almacen.equipos(numero), reemplazado = null;
-    while (lista.length > TOPE_EQUIPOS) {
-      reemplazado = lista[0];
-      almacen.quitarEquipo(numero, lista[0].codigo);
-      lista = almacen.equipos(numero);
-    }
+    const { lista, reemplazado } = activarEquipo(numero, ing.codigo);
     ing.estado = 'ok';
     ing.numero = numero;
     console.log(`🔓 PWA: equipo ${ing.codigo} activado para ${cuenta.nombre} (${numero}), ${lista.length} de ${TOPE_EQUIPOS}`);
@@ -330,12 +390,68 @@ function crearServicio(almacen, { numeroBot }) {
     return res.json({ activo: true, llave: llavePaquete() });
   });
 
-  return { recibirIngreso, ingreso, estado, equipo, _ingresos: ingresos };
+  // ── compra desde la app ──
+  // POST /pwa/compra {codigo, numero, metodo} → {orden, token}. Si ya hay una pendiente igual (tocó dos veces), la misma.
+  const compra = ruta(TOPES.compra, async ({ codigo, numero, metodo }, res) => {
+    codigo = normalizarCodigo(codigo);
+    numero = normalizarNumero(numero);
+    if (!METODOS_PAGO[metodo]) throw new Error('Forma de pago desconocida.');
+    if (!configurado()) return res.status(503).json(SIN_CONFIG);
+    let o = almacen.ordenPendiente(codigo, numero, metodo);
+    if (!o) {
+      o = almacen.crearOrden({ token: tokenOrden(), codigo, numero, metodo });
+      console.log(`🧾 PWA: orden ${textoOrden(o.id)} · ${METODOS_PAGO[metodo]} · ${numero} · equipo ${codigo}`);
+      Promise.resolve().then(() => avisarOrden(o)).catch((err) => console.error(`❌ No se pudo avisar la orden ${textoOrden(o.id)}:`, err.message));
+    }
+    return res.json({ orden: textoOrden(o.id), token: o.token });
+  });
+
+  // POST /pwa/compra/estado {token} → {estado, orden} (+ clave, llave y nombre si fue aprobada)
+  const compraEstado = ruta(TOPES.compraEstado, async ({ token }, res) => {
+    const o = almacen.ordenPorToken(String(token || ''));
+    if (!o) return res.json({ estado: 'desconocida' });
+    const orden = textoOrden(o.id);
+    if (o.estado !== 'aprobada') return res.json({ estado: o.estado, orden });
+    const cuenta = almacen.cuenta(o.numero);
+    if (!cuenta) return res.json({ estado: 'sin_licencia', orden });            // le dieron de baja después
+    if (!configurado()) return res.status(503).json(SIN_CONFIG);
+    return res.json({ estado: 'aprobada', orden, nombre: cuenta.nombre, clave: generarClave(cuenta.nombre, o.codigo), llave: llavePaquete() });
+  });
+
+  /** El dueño confirmó el pago de la orden «id». Devuelve el texto para el dueño. */
+  function aprobar(id) {
+    const o = almacen.orden(id);
+    if (!o) return `No existe la orden ${textoOrden(id)}.`;
+    if (o.estado === 'aprobada') return `La orden ${textoOrden(id)} ya estaba aprobada.`;
+    if (o.estado === 'rechazada') return `La orden ${textoOrden(id)} estaba rechazada. Para habilitarla igual: /pwa Nombre ${o.numero}`;
+    if (!almacen.cuenta(o.numero)) almacen.guardarCuenta(o.numero, `Cliente ${numeroVisible(o.numero)}`);
+    const { lista, reemplazado } = activarEquipo(o.numero, o.codigo);
+    almacen.resolverOrden(id, 'aprobada');
+    console.log(`✅ PWA: orden ${textoOrden(id)} aprobada (${o.numero}, equipo ${o.codigo})`);
+    return `✓ ${textoOrden(id)} aprobada · ${numeroVisible(o.numero)} · el equipo se activa solo (${lista.length} de ${TOPE_EQUIPOS}).` +
+      (reemplazado ? ` Reemplazó al equipo ${reemplazado.codigo}.` : '');
+  }
+
+  /** El dueño rechazó la orden «id» (no entró el pago). */
+  function rechazar(id) {
+    const o = almacen.orden(id);
+    if (!o) return `No existe la orden ${textoOrden(id)}.`;
+    if (o.estado !== 'pendiente') return `La orden ${textoOrden(id)} ya estaba ${o.estado}.`;
+    almacen.resolverOrden(id, 'rechazada');
+    console.log(`🚫 PWA: orden ${textoOrden(id)} rechazada`);
+    return `${textoOrden(id)} rechazada. En la app le aparece que no encontramos el pago.`;
+  }
+
+  return { recibirIngreso, ingreso, estado, equipo, compra, compraEstado, aprobar, rechazar, _ingresos: ingresos };
 }
 
 module.exports = {
   TOPE_EQUIPOS,
   TOPES,
+  METODOS_PAGO,
+  textoOrden,
+  idOrden,
+  avisoOrden,
   normalizarCodigo,
   extraerCodigo,
   normalizarNombre,

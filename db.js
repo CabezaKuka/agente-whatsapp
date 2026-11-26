@@ -68,7 +68,25 @@ function initDb() {
       alta TEXT NOT NULL,
       UNIQUE (numero, codigo)
     );
+
+    -- Órdenes de compra hechas desde la app (el dueño las confirma o rechaza). Empiezan en OM-1001.
+    CREATE TABLE IF NOT EXISTS pwa_ordenes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      codigo TEXT NOT NULL,
+      numero TEXT NOT NULL,
+      metodo TEXT NOT NULL,
+      estado TEXT NOT NULL DEFAULT 'pendiente',
+      creada TEXT NOT NULL,
+      resuelta TEXT
+    );
   `);
+
+  // Numeración de las órdenes desde OM-1001
+  db.prepare(`
+    INSERT INTO sqlite_sequence (name, seq) SELECT 'pwa_ordenes', 1000
+    WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'pwa_ordenes')
+  `).run();
 
   // Poblar catálogo solo si está vacío
   const count = db.prepare('SELECT COUNT(*) as n FROM catalogo').get();
@@ -283,6 +301,30 @@ const almacenPwa = {
   },
   contarCuentas() {
     return db.prepare('SELECT COUNT(*) as n FROM pwa_cuentas').get().n;
+  },
+  // órdenes de compra desde la app
+  crearOrden({ token, codigo, numero, metodo }) {
+    const r = db.prepare(`
+      INSERT INTO pwa_ordenes (token, codigo, numero, metodo, estado, creada) VALUES (?, ?, ?, ?, 'pendiente', ?)
+    `).run(token, codigo, numero, metodo, new Date().toISOString());
+    return almacenPwa.orden(Number(r.lastInsertRowid));
+  },
+  orden(id) {
+    return db.prepare('SELECT * FROM pwa_ordenes WHERE id = ?').get(id) || null;
+  },
+  ordenPorToken(token) {
+    return db.prepare('SELECT * FROM pwa_ordenes WHERE token = ?').get(token) || null;
+  },
+  ordenPendiente(codigo, numero, metodo) {
+    return db.prepare(`
+      SELECT * FROM pwa_ordenes WHERE estado = 'pendiente' AND codigo = ? AND numero = ? AND metodo = ? ORDER BY id DESC LIMIT 1
+    `).get(codigo, numero, metodo) || null;
+  },
+  resolverOrden(id, estado) {
+    db.prepare('UPDATE pwa_ordenes SET estado = ?, resuelta = ? WHERE id = ?').run(estado, new Date().toISOString(), id);
+  },
+  ordenesPendientes(limite = 10) {
+    return db.prepare("SELECT * FROM pwa_ordenes WHERE estado = 'pendiente' ORDER BY id DESC LIMIT ?").all(limite);
   },
 };
 

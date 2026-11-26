@@ -1130,6 +1130,16 @@ app.post('/webhook', async (req, res) => {
               }
             }
 
+            // ── BOTONES DEL AVISO DE COMPRA (Confirmar / Rechazar), solo del dueño ──
+            if (msg.type === 'interactive' && from === NOTIFICAR_A) {
+              const idBoton = msg.interactive?.button_reply?.id || '';
+              const b = idBoton.match(/^pwa_(ok|no):(\d+)$/);
+              if (b) {
+                await manejarComandoOrden(`/${b[1]} ${b[2]}`);
+                continue;
+              }
+            }
+
             if (msg.type !== 'text') {
               saveIncoming({ waId: from, name: contactName, text: `[Mensaje ${msg.type || 'no soportado'} recibido]`, metaMessageId: messageId });
               const replyText = 'Solo puedo responder mensajes de texto por ahora. Escribime tu consulta 😊';
@@ -1168,6 +1178,12 @@ app.post('/webhook', async (req, res) => {
             // ── COMANDOS DE CLAVES optiMAX PARA EL CELULAR (solo desde el número del dueño) ──
             if (from === NOTIFICAR_A && /^\/pwa(s|baja)?(\s|$)/i.test(text.trim())) {
               await manejarComandoPwa(text.trim());
+              continue;
+            }
+
+            // ── ÓRDENES DE COMPRA DESDE LA APP: /ok 1048, /no 1048, /ordenes (solo desde el número del dueño) ──
+            if (from === NOTIFICAR_A && /^\/(ok|no|ordenes|órdenes)(\s|$)/i.test(text.trim())) {
+              await manejarComandoOrden(text.trim());
               continue;
             }
 
@@ -1660,7 +1676,43 @@ async function numeroBot() {
   return env.length >= 10 ? env : null;
 }
 
-const servicioPwa = licP.crearServicio(almacenPwa, { numeroBot });
+const servicioPwa = licP.crearServicio(almacenPwa, { numeroBot, avisarOrden });
+
+// Compra desde la app: aviso al dueño con los botones Confirmar / Rechazar. Ojo: Meta solo deja que el bot le
+// escriba al dueño si el dueño le escribió al bot en las últimas 24 h (lo mismo que los avisos de leads); si no llega,
+// /ordenes muestra las pendientes.
+async function avisarOrden(o) {
+  const r = await enviarBotones(NOTIFICAR_A, licP.avisoOrden(o), [
+    { id: `pwa_ok:${o.id}`, title: '✓ Confirmar pago' },
+    { id: `pwa_no:${o.id}`, title: 'Rechazar' },
+  ]);
+  console.log(`🔔 Aviso de orden ${licP.textoOrden(o.id)} enviado a ${NOTIFICAR_A} — id ${extractMetaMessageId(r)}`);
+}
+
+// /ok 1048 · /no 1048 · /ordenes (y los botones del aviso) — solo desde el número del dueño
+async function manejarComandoOrden(texto) {
+  const responder = async (t) => {
+    try { await enviarMensaje(NOTIFICAR_A, t); }
+    catch (err) { console.error('❌ Error respondiendo comando de órdenes:', err.message); }
+  };
+  try {
+    const m = texto.match(/^\/(ok|no|ordenes|órdenes)\b\s*([\s\S]*)$/i);
+    const cmd = m[1].toLowerCase();
+    if (cmd === 'ordenes' || cmd === 'órdenes') {
+      const filas = almacenPwa.ordenesPendientes(10);
+      if (!filas.length) return responder('No hay órdenes pendientes.');
+      return responder('🧾 Órdenes pendientes:\n' + filas.map(o =>
+        `${licP.textoOrden(o.id)} · ${fechaCorta(o.creada)} · ${licP.METODOS_PAGO[o.metodo] || o.metodo} · ${licP.numeroVisible(o.numero)}`
+      ).join('\n') + '\n\nConfirmar: /ok NÚMERO · Rechazar: /no NÚMERO');
+    }
+    const id = licP.idOrden(m[2]);
+    if (!id) return responder(`Falta el número de orden: /${cmd} 1048`);
+    return responder(cmd === 'ok' ? servicioPwa.aprobar(id) : servicioPwa.rechazar(id));
+  } catch (err) {
+    console.error('❌ Error en comando de órdenes:', err.message);
+    await responder(`⚠️ No se hizo: ${err.message}`);
+  }
+}
 
 async function manejarComandoPwa(texto) {
   const responder = async (t) => {
@@ -1712,7 +1764,8 @@ async function manejarComandoPwa(texto) {
 }
 
 // Rutas de la PWA (CORS abierto: la PWA está en otro dominio).
-for (const [ruta, h] of [['/pwa/ingreso', servicioPwa.ingreso], ['/pwa/ingreso/estado', servicioPwa.estado], ['/pwa/equipo', servicioPwa.equipo]]) {
+for (const [ruta, h] of [['/pwa/ingreso', servicioPwa.ingreso], ['/pwa/ingreso/estado', servicioPwa.estado], ['/pwa/equipo', servicioPwa.equipo],
+  ['/pwa/compra', servicioPwa.compra], ['/pwa/compra/estado', servicioPwa.compraEstado]]) {
   app.options(ruta, h);
   app.post(ruta, h);
 }
@@ -1723,6 +1776,21 @@ async function enviarMensaje(para, texto) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: 'text', text: { body: texto } })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(data));
+  return data;
+}
+
+// Texto con hasta 3 botones de respuesta (títulos de hasta 20 caracteres). botones: [{id, title}]
+async function enviarBotones(para, texto, botones) {
+  const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp', to: para, type: 'interactive',
+      interactive: { type: 'button', body: { text: texto }, action: { buttons: botones.map(b => ({ type: 'reply', reply: b })) } },
+    })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(data));
