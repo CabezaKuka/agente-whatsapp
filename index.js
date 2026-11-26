@@ -1077,6 +1077,37 @@ app.post('/webhook', async (req, res) => {
           // cualquier motivo, el cliente recibe un aviso en vez de silencio total,
           // y el resto de los mensajes del lote no se ven afectados.
           try {
+            // ── COMPROBANTE DE PAGO (foto o PDF) de quien avisó un pago de optiMAX PRO: va al dueño ──
+            if ((msg.type === 'image' || msg.type === 'document') && from !== NOTIFICAR_A) {
+              const pie = msg.image?.caption || msg.document?.caption || '';
+              const tokPago = licP.esPago(pie);
+              if (tokPago) {                                   // mandó el aviso escrito al pie de la foto
+                const r = servicioPwa.recibirPago(from, contactName, tokPago);
+                const res = await enviarMensaje(from, r);
+                saveOutgoing({ waId: from, text: r, metaMessageId: extractMetaMessageId(res), status: 'sent' });
+              }
+              const ordComp = servicioPwa.ordenDeComprobante(from);
+              if (ordComp) {
+                const t = licP.textoOrden(ordComp.id);
+                saveIncoming({ waId: from, name: contactName, text: `[Comprobante ${t}]${pie ? ' ' + pie : ''}`, metaMessageId: messageId });
+                let replyText;
+                try {
+                  await reenviarComprobante(ordComp, msg);
+                  almacenPwa.sumarComprobante(ordComp.id);
+                  console.log(`📎 PWA: comprobante de ${t} reenviado al dueño`);
+                  replyText = `✓ Recibimos el comprobante de la orden ${t}. Cuando confirmemos el pago te avisamos y la PRO se activa sola.`;
+                } catch (err) {
+                  console.error(`❌ No se pudo reenviar el comprobante de ${t}:`, err.message);
+                  try { await enviarMensaje(NOTIFICAR_A, `📎 ${from} mandó un comprobante de ${t} pero no se pudo reenviar: miralo en /inbox.`); } catch {}
+                  replyText = `✓ Recibimos el comprobante de la orden ${t}.`;
+                }
+                const res = await enviarMensaje(from, replyText);
+                saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(res), status: 'sent' });
+                continue;
+              }
+              if (tokPago) continue;
+            }
+
             if (msg.type === 'audio') {
               const audioMediaId = msg.audio?.id;
               if (audioMediaId && OPENAI_API_KEY) {
@@ -1130,6 +1161,16 @@ app.post('/webhook', async (req, res) => {
               }
             }
 
+            // ── BOTONES DEL AVISO DE COMPRA (Confirmar / Rechazar), solo del dueño ──
+            if (msg.type === 'interactive' && from === NOTIFICAR_A) {
+              const idBoton = msg.interactive?.button_reply?.id || '';
+              const b = idBoton.match(/^pwa_(ok|no):(\d+)$/);
+              if (b) {
+                await manejarComandoOrden(`/${b[1]} ${b[2]}`);
+                continue;
+              }
+            }
+
             if (msg.type !== 'text') {
               saveIncoming({ waId: from, name: contactName, text: `[Mensaje ${msg.type || 'no soportado'} recibido]`, metaMessageId: messageId });
               const replyText = 'Solo puedo responder mensajes de texto por ahora. Escribime tu consulta 😊';
@@ -1143,6 +1184,16 @@ app.post('/webhook', async (req, res) => {
 
             // ── ACTIVAR optiMAX PRO EN UN EQUIPO (PWA): el mensaje que abre «Entrar con WhatsApp» ──
             // Llega de cualquier número; no pasa por el modelo. Se guarda en el inbox para verlo.
+            // ── AVISO DE PAGO desde la app («Pagué optiMAX Taller PRO · orden OM-1048 · ABCD-EFGH»): sin el modelo ──
+            const tokenPago = licP.esPago(text);
+            if (tokenPago) {
+              saveIncoming({ waId: from, name: contactName, text, metaMessageId: messageId });
+              const replyText = servicioPwa.recibirPago(from, contactName, tokenPago);
+              const result = await enviarMensaje(from, replyText);
+              saveOutgoing({ waId: from, text: replyText, metaMessageId: extractMetaMessageId(result), status: 'sent' });
+              continue;
+            }
+
             const tokenPwa = licP.esIngreso(text);
             if (tokenPwa) {
               saveIncoming({ waId: from, name: contactName, text, metaMessageId: messageId });
@@ -1168,6 +1219,12 @@ app.post('/webhook', async (req, res) => {
             // ── COMANDOS DE CLAVES optiMAX PARA EL CELULAR (solo desde el número del dueño) ──
             if (from === NOTIFICAR_A && /^\/pwa(s|baja)?(\s|$)/i.test(text.trim())) {
               await manejarComandoPwa(text.trim());
+              continue;
+            }
+
+            // ── ÓRDENES DE COMPRA DESDE LA APP: /ok 1048, /no 1048, /ordenes (solo desde el número del dueño) ──
+            if (from === NOTIFICAR_A && /^\/(ok|no|ordenes|órdenes)(\s|$)/i.test(text.trim())) {
+              await manejarComandoOrden(text.trim());
               continue;
             }
 
@@ -1660,7 +1717,97 @@ async function numeroBot() {
   return env.length >= 10 ? env : null;
 }
 
-const servicioPwa = licP.crearServicio(almacenPwa, { numeroBot });
+const servicioPwa = licP.crearServicio(almacenPwa, { numeroBot, avisarOrden });
+
+// Compra desde la app: aviso al dueño con los botones Confirmar / Rechazar. Ojo: Meta solo deja que el bot le
+// escriba al dueño si el dueño le escribió al bot en las últimas 24 h (lo mismo que los avisos de leads); si no llega,
+// /ordenes muestra las pendientes.
+async function avisarOrden(o) {
+  const r = await enviarBotones(NOTIFICAR_A, licP.avisoOrden(o), [
+    { id: `pwa_ok:${o.id}`, title: '✓ Confirmar pago' },
+    { id: `pwa_no:${o.id}`, title: 'Rechazar' },
+  ]);
+  console.log(`🔔 Aviso de orden ${licP.textoOrden(o.id)} enviado a ${NOTIFICAR_A} — id ${extractMetaMessageId(r)}`);
+}
+
+// Comprobante (foto o PDF) que mandó el cliente después de avisar el pago: se le reenvía al dueño. La imagen se baja de
+// Meta y se vuelve a subir (el id de un archivo recibido no sirve para mandarlo). Si la orden sigue pendiente, va con
+// los botones Confirmar / Rechazar; si no, con el texto.
+async function reenviarComprobante(o, msg) {
+  const media = msg.image || msg.document;
+  const meta = await (await fetch(`https://graph.facebook.com/v18.0/${media.id}`, {
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}` }
+  })).json();
+  if (!meta.url) throw new Error('Meta no dio la dirección del archivo: ' + JSON.stringify(meta));
+  const arch = await fetch(meta.url, { headers: { 'Authorization': `Bearer ${WA_TOKEN}` } });
+  if (!arch.ok) throw new Error(`No se pudo bajar el archivo (${arch.status})`);
+  const mime = media.mime_type || meta.mime_type || 'image/jpeg';
+  const esImagen = msg.type === 'image';
+  const nombre = msg.document?.filename || (esImagen ? 'comprobante.jpg' : 'comprobante.pdf');
+  const fd = new FormData();
+  fd.append('messaging_product', 'whatsapp');
+  fd.append('type', mime);
+  fd.append('file', new Blob([await arch.arrayBuffer()], { type: mime }), nombre);
+  const sub = await (await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/media`, {
+    method: 'POST', headers: { 'Authorization': `Bearer ${WA_TOKEN}` }, body: fd,
+  })).json();
+  if (!sub.id) throw new Error('No se pudo subir el comprobante: ' + JSON.stringify(sub));
+  const t = licP.textoOrden(o.id);
+  const texto = `📎 Comprobante de ${t} · ${o.nombre ? `${o.nombre} · ` : ''}${licP.numeroVisible(o.numero)} · ` +
+    `${licP.METODOS_PAGO[o.metodo] || o.metodo}` + (o.estado === 'pendiente' ? '' : ` (orden ${o.estado})`);
+  const archivo = esImagen ? { id: sub.id } : { id: sub.id, filename: nombre };
+  if (o.estado === 'pendiente') {
+    try {
+      return await enviarInteractivo(NOTIFICAR_A, {
+        type: 'button',
+        header: { type: esImagen ? 'image' : 'document', [esImagen ? 'image' : 'document']: archivo },
+        body: { text: texto },
+        action: { buttons: [
+          { type: 'reply', reply: { id: `pwa_ok:${o.id}`, title: '✓ Confirmar pago' } },
+          { type: 'reply', reply: { id: `pwa_no:${o.id}`, title: 'Rechazar' } },
+        ] },
+      });
+    } catch (err) {
+      console.error('❌ Comprobante con botones no salió; va solo:', err.message);
+    }
+  }
+  return enviarArchivo(NOTIFICAR_A, esImagen ? 'image' : 'document', { ...archivo, caption: `${texto}\n/ok ${o.id} · /no ${o.id}` });
+}
+
+// /ok 1048 · /no 1048 · /ordenes (y los botones del aviso) — solo desde el número del dueño
+async function manejarComandoOrden(texto) {
+  const responder = async (t) => {
+    try { await enviarMensaje(NOTIFICAR_A, t); }
+    catch (err) { console.error('❌ Error respondiendo comando de órdenes:', err.message); }
+  };
+  try {
+    const m = texto.match(/^\/(ok|no|ordenes|órdenes)\b\s*([\s\S]*)$/i);
+    const cmd = m[1].toLowerCase();
+    if (cmd === 'ordenes' || cmd === 'órdenes') {
+      const filas = almacenPwa.ordenesPendientes(10);
+      if (!filas.length) return responder('No hay órdenes pendientes.');
+      return responder('🧾 Órdenes pendientes:\n' + filas.map(o =>
+        `${licP.textoOrden(o.id)} · ${fechaCorta(o.avisada || o.creada)} · ${licP.METODOS_PAGO[o.metodo] || o.metodo} · ` +
+        `${o.nombre ? `${o.nombre} · ` : ''}${licP.numeroVisible(o.numero)}${o.comprobantes ? ` · 📎 ${o.comprobantes}` : ''}`
+      ).join('\n') + '\n\nConfirmar: /ok NÚMERO · Rechazar: /no NÚMERO');
+    }
+    const id = licP.idOrden(m[2]);
+    if (!id) return responder(`Falta el número de orden: /${cmd} 1048`);
+    const r = cmd === 'ok' ? servicioPwa.aprobar(id) : servicioPwa.rechazar(id);
+    await responder(r.texto);
+    if (r.numero && r.cliente) {                       // el cliente le escribió al bot al avisar el pago: se le puede contestar
+      try {
+        const res = await enviarMensaje(r.numero, r.cliente);
+        saveOutgoing({ waId: r.numero, text: r.cliente, metaMessageId: extractMetaMessageId(res), status: 'sent' });
+      } catch (err) {
+        console.error(`❌ No se pudo avisar al cliente ${r.numero} de la orden ${id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Error en comando de órdenes:', err.message);
+    await responder(`⚠️ No se hizo: ${err.message}`);
+  }
+}
 
 async function manejarComandoPwa(texto) {
   const responder = async (t) => {
@@ -1712,7 +1859,8 @@ async function manejarComandoPwa(texto) {
 }
 
 // Rutas de la PWA (CORS abierto: la PWA está en otro dominio).
-for (const [ruta, h] of [['/pwa/ingreso', servicioPwa.ingreso], ['/pwa/ingreso/estado', servicioPwa.estado], ['/pwa/equipo', servicioPwa.equipo]]) {
+for (const [ruta, h] of [['/pwa/ingreso', servicioPwa.ingreso], ['/pwa/ingreso/estado', servicioPwa.estado], ['/pwa/equipo', servicioPwa.equipo],
+  ['/pwa/compra', servicioPwa.compra], ['/pwa/compra/estado', servicioPwa.compraEstado]]) {
   app.options(ruta, h);
   app.post(ruta, h);
 }
@@ -1723,6 +1871,34 @@ async function enviarMensaje(para, texto) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: 'text', text: { body: texto } })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(data));
+  return data;
+}
+
+// Texto con hasta 3 botones de respuesta (títulos de hasta 20 caracteres). botones: [{id, title}]
+async function enviarBotones(para, texto, botones) {
+  return enviarInteractivo(para, { type: 'button', body: { text: texto }, action: { buttons: botones.map(b => ({ type: 'reply', reply: b })) } });
+}
+
+async function enviarInteractivo(para, interactive) {
+  const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: 'interactive', interactive })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(data));
+  return data;
+}
+
+// Imagen o documento ya subido a Meta: tipo 'image' | 'document', archivo {id, caption?, filename?}
+async function enviarArchivo(para, tipo, archivo) {
+  const res = await fetch(`https://graph.facebook.com/v18.0/${WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: tipo, [tipo]: archivo })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(data));

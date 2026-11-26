@@ -68,7 +68,29 @@ function initDb() {
       alta TEXT NOT NULL,
       UNIQUE (numero, codigo)
     );
+
+    -- Órdenes de compra hechas desde la app (empiezan en OM-1001). esperando = el cliente vio los datos de pago;
+    -- pendiente = mandó «Pagué…» por WhatsApp (numero y nombre salen de ese mensaje); después aprobada / rechazada.
+    CREATE TABLE IF NOT EXISTS pwa_ordenes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      codigo TEXT NOT NULL,
+      metodo TEXT NOT NULL,
+      numero TEXT,
+      nombre TEXT,
+      estado TEXT NOT NULL DEFAULT 'esperando',
+      creada TEXT NOT NULL,
+      avisada TEXT,
+      resuelta TEXT,
+      comprobantes INTEGER NOT NULL DEFAULT 0
+    );
   `);
+
+  // Numeración de las órdenes desde OM-1001
+  db.prepare(`
+    INSERT INTO sqlite_sequence (name, seq) SELECT 'pwa_ordenes', 1000
+    WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'pwa_ordenes')
+  `).run();
 
   // Poblar catálogo solo si está vacío
   const count = db.prepare('SELECT COUNT(*) as n FROM catalogo').get();
@@ -283,6 +305,40 @@ const almacenPwa = {
   },
   contarCuentas() {
     return db.prepare('SELECT COUNT(*) as n FROM pwa_cuentas').get().n;
+  },
+  // órdenes de compra desde la app (mismas funciones que licencias_pwa.almacenMemoria())
+  crearOrden({ token, codigo, metodo }) {
+    const r = db.prepare(`
+      INSERT INTO pwa_ordenes (token, codigo, metodo, estado, creada) VALUES (?, ?, ?, 'esperando', ?)
+    `).run(token, codigo, metodo, new Date().toISOString());
+    return almacenPwa.orden(Number(r.lastInsertRowid));
+  },
+  orden(id) {
+    return db.prepare('SELECT * FROM pwa_ordenes WHERE id = ?').get(id) || null;
+  },
+  ordenPorToken(token) {
+    return db.prepare('SELECT * FROM pwa_ordenes WHERE token = ?').get(token) || null;
+  },
+  ordenEsperando(codigo, metodo) {
+    return db.prepare(`
+      SELECT * FROM pwa_ordenes WHERE estado = 'esperando' AND codigo = ? AND metodo = ? ORDER BY id DESC LIMIT 1
+    `).get(codigo, metodo) || null;
+  },
+  avisarPago(id, numero, nombre) {
+    db.prepare("UPDATE pwa_ordenes SET numero = ?, nombre = ?, estado = 'pendiente', avisada = ? WHERE id = ?")
+      .run(numero, nombre, new Date().toISOString(), id);
+  },
+  resolverOrden(id, estado) {
+    db.prepare('UPDATE pwa_ordenes SET estado = ?, resuelta = ? WHERE id = ?').run(estado, new Date().toISOString(), id);
+  },
+  ordenesPendientes(limite = 10) {
+    return db.prepare("SELECT * FROM pwa_ordenes WHERE estado = 'pendiente' ORDER BY id DESC LIMIT ?").all(limite);
+  },
+  ordenAvisadaDe(numero) {
+    return db.prepare('SELECT * FROM pwa_ordenes WHERE numero = ? AND avisada IS NOT NULL ORDER BY avisada DESC, id DESC LIMIT 1').get(numero) || null;
+  },
+  sumarComprobante(id) {
+    db.prepare('UPDATE pwa_ordenes SET comprobantes = comprobantes + 1 WHERE id = ?').run(id);
   },
 };
 
