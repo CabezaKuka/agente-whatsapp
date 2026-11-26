@@ -12,14 +12,17 @@
 //   4. Al abrir con internet, la PWA pregunta POST /pwa/equipo {clave, codigo} → {activo, llave}. Si el equipo fue
 //      reemplazado (activo: false), vuelve a la DEMO. Sin internet sigue andando (sin plazo máximo, decisión de Max).
 //
-// Compra desde la app (26-nov, sin hablar con el cliente):
-//   a. El cliente pone su número de WhatsApp, elige cómo pagar, paga y toca «Ya pagué»: POST /pwa/compra
-//      {codigo, numero, metodo} → {orden: "OM-1048", token}. El bot le avisa al dueño (avisarOrden) con los botones
-//      Confirmar / Rechazar (o «/ok 1048», «/no 1048»).
-//   b. El dueño mira el banco o Binance y confirma: aprobar() crea la cuenta del número (si no la tenía) y le anota
-//      ese equipo, igual que «/pwa» + «Entrar con WhatsApp».
-//   c. La PWA consulta POST /pwa/compra/estado {token} → {estado: pendiente | aprobada (+ clave, llave, nombre) |
-//      rechazada | sin_licencia | desconocida}. Las órdenes quedan en la base (no vencen).
+// Compra desde la app (26-nov, sin hablar con el cliente; el número sale de WhatsApp, no lo escribe el cliente):
+//   a. El cliente elige cómo pagar y ve los datos: POST /pwa/compra {codigo, metodo} → {orden: "OM-1048", token,
+//      whatsapp, texto}. La orden queda «esperando» (sin aviso a nadie).
+//   b. Paga y toca «Ya pagué»: la PWA abre WhatsApp con el texto («Pagué optiMAX Taller PRO · orden OM-1048 ·
+//      ABCD-EFGH») para el bot. Cuando llega (recibirPago), la orden queda «pendiente» con el número del que vino y el
+//      nombre del perfil, el bot le contesta al cliente y le avisa al dueño (avisarOrden) con Confirmar / Rechazar
+//      (o «/ok 1048», «/no 1048»). Si después manda una foto o un PDF (comprobante), el bot se lo reenvía al dueño.
+//   c. El dueño mira el banco o Binance y confirma: aprobar() crea la cuenta del número (si no la tenía) y le anota
+//      ese equipo, igual que «/pwa» + «Entrar con WhatsApp»; al cliente le llega «Pago confirmado».
+//   d. La PWA consulta POST /pwa/compra/estado {token} → {estado: esperando | pendiente | aprobada (+ clave, llave,
+//      nombre) | rechazada | sin_licencia | desconocida}. Las órdenes quedan en la base (no vencen).
 //
 // Las claves tienen el mismo formato que las de optiMAX PC y optiTACH, con SU PROPIO par de llaves y prefijo OPWA1-,
 // y son EXACTAMENTE las mismas que genera herramientas/licencia_pwa.py del repo optimax-pwa-pro (Ed25519 es
@@ -218,21 +221,25 @@ const METODOS_PAGO = {
   trc20: 'USDT TRC-20 · 20 USDT',
 };
 const PRIMERA_ORDEN = 1001;
+const HORAS_COMPROBANTE = 72;                 // fotos / PDF hasta 72 h después del aviso van al dueño como comprobante
 const textoOrden = (id) => `OM-${id}`;
 // «OM-1048», «om1048», «1048» → 1048 (o null)
 function idOrden(texto) {
   const m = String(texto).match(/(?:om\s*-?\s*)?(\d{1,9})/i);
   return m ? Number(m[1]) : null;
 }
-function tokenOrden() {
-  return crypto.randomBytes(12).toString('base64url');
+// Texto que la PWA abre en WhatsApp al tocar «Ya pagué» y el bot reconoce (token = ABCD-EFGH, como el de activar).
+const textoPago = (id, token) => `Pagué optiMAX Taller PRO · orden ${textoOrden(id)} · ${token}`;
+function esPago(texto) {
+  const m = String(texto).match(/pagu[eé][\s\S]*?optimax[\s\S]*?\b([A-Z2-7]{4}-[A-Z2-7]{4})\b/i);
+  return m ? m[1].toUpperCase() : null;
 }
 // Aviso al dueño de una orden nueva (va con los botones Confirmar / Rechazar).
 function avisoOrden(o) {
-  const hora = new Date(new Date(o.creada).getTime() - 4 * 3600 * 1000).toISOString().slice(11, 16);   // Bolivia
+  const hora = new Date(new Date(o.avisada || o.creada).getTime() - 4 * 3600 * 1000).toISOString().slice(11, 16);   // Bolivia
   return `🧾 Compra optiMAX Taller PRO\n\nOrden: ${textoOrden(o.id)}\nPago: ${METODOS_PAGO[o.metodo] || o.metodo}\n` +
-    `WhatsApp: ${numeroVisible(o.numero)}\nHora: ${hora}\n\nFijate que haya entrado el pago y confirmá. ` +
-    `Sin botones: /ok ${o.id} o /no ${o.id}`;
+    `Cliente: ${o.nombre ? `${o.nombre} · ` : ''}${numeroVisible(o.numero)}\nHora: ${hora}\n\n` +
+    `Fijate que haya entrado el pago y confirmá. Si manda el comprobante, te llega acá. Sin botones: /ok ${o.id} o /no ${o.id}`;
 }
 
 // ── almacén en memoria (pruebas). El bot usa el de db.js, con las mismas funciones. ──
@@ -257,23 +264,33 @@ function almacenMemoria() {
       if (i >= 0) equipos.splice(i, 1);
     },
     cuentaDeEquipo: (codigo) => equipos.find((e) => e.codigo === codigo)?.numero || null,
-    // órdenes de compra: {id, token, codigo, numero, metodo, estado, creada, resuelta}
+    // órdenes de compra: {id, token, codigo, metodo, numero, nombre, estado, creada, avisada, resuelta, comprobantes}
     crearOrden(o) {
-      const orden = { ...o, id: PRIMERA_ORDEN + ordenes.length, estado: 'pendiente', creada: new Date().toISOString(), resuelta: null };
+      const orden = { ...o, id: PRIMERA_ORDEN + ordenes.length, numero: null, nombre: null, estado: 'esperando',
+        creada: new Date().toISOString(), avisada: null, resuelta: null, comprobantes: 0 };
       ordenes.push(orden);
       return { ...orden };
     },
     orden: (id) => { const o = ordenes.find((x) => x.id === id); return o ? { ...o } : null; },
     ordenPorToken: (token) => { const o = ordenes.find((x) => x.token === token); return o ? { ...o } : null; },
-    ordenPendiente: (codigo, numero, metodo) => {
-      const o = [...ordenes].reverse().find((x) => x.estado === 'pendiente' && x.codigo === codigo && x.numero === numero && x.metodo === metodo);
+    ordenEsperando: (codigo, metodo) => {
+      const o = [...ordenes].reverse().find((x) => x.estado === 'esperando' && x.codigo === codigo && x.metodo === metodo);
       return o ? { ...o } : null;
+    },
+    avisarPago(id, numero, nombre) {
+      const o = ordenes.find((x) => x.id === id);
+      if (o) Object.assign(o, { numero, nombre, estado: 'pendiente', avisada: new Date().toISOString() });
     },
     resolverOrden(id, estado) {
       const o = ordenes.find((x) => x.id === id);
       if (o) { o.estado = estado; o.resuelta = new Date().toISOString(); }
     },
     ordenesPendientes: (limite = 10) => ordenes.filter((x) => x.estado === 'pendiente').slice(-limite).reverse().map((o) => ({ ...o })),
+    ordenAvisadaDe: (numero) => {
+      const o = [...ordenes].reverse().find((x) => x.numero === numero && x.avisada);
+      return o ? { ...o } : null;
+    },
+    sumarComprobante(id) { const o = ordenes.find((x) => x.id === id); if (o) o.comprobantes++; },
   };
 }
 
@@ -281,8 +298,8 @@ const fechaCorta = (iso) => { try { const d = new Date(iso); return `${String(d.
 
 /**
  * Servicio de licencias de la PWA. almacen: {guardarCuenta, cuenta, quitarCuenta, buscarCuentas, equipos,
- * agregarEquipo, quitarEquipo, cuentaDeEquipo, crearOrden, orden, ordenPorToken, ordenPendiente, resolverOrden,
- * ordenesPendientes} (db.js o almacenMemoria()). numeroBot: async () → número del bot (a donde la PWA manda el
+ * agregarEquipo, quitarEquipo, cuentaDeEquipo, crearOrden, orden, ordenPorToken, ordenEsperando, avisarPago,
+ * resolverOrden, ordenesPendientes, ordenAvisadaDe, sumarComprobante} (db.js o almacenMemoria()). numeroBot: async () → número del bot (a donde la PWA manda el
  * mensaje de activación). avisarOrden: async (orden) → avisa al dueño de una compra nueva (errores: se registran).
  */
 function crearServicio(almacen, { numeroBot, avisarOrden = async () => {} }) {
@@ -391,24 +408,27 @@ function crearServicio(almacen, { numeroBot, avisarOrden = async () => {} }) {
   });
 
   // ── compra desde la app ──
-  // POST /pwa/compra {codigo, numero, metodo} → {orden, token}. Si ya hay una pendiente igual (tocó dos veces), la misma.
-  const compra = ruta(TOPES.compra, async ({ codigo, numero, metodo }, res) => {
+  // POST /pwa/compra {codigo, metodo} → {orden, token, whatsapp, texto}. Si este equipo ya tiene una orden «esperando»
+  // con esa forma de pago (volvió a mirar los datos), la misma.
+  const compra = ruta(TOPES.compra, async ({ codigo, metodo }, res) => {
     codigo = normalizarCodigo(codigo);
-    numero = normalizarNumero(numero);
     if (!METODOS_PAGO[metodo]) throw new Error('Forma de pago desconocida.');
     if (!configurado()) return res.status(503).json(SIN_CONFIG);
-    let o = almacen.ordenPendiente(codigo, numero, metodo);
+    const whatsapp = await numeroBot().catch(() => null);
+    if (!whatsapp) return res.status(503).json(SIN_CONFIG);
+    let o = almacen.ordenEsperando(codigo, metodo);
     if (!o) {
-      o = almacen.crearOrden({ token: tokenOrden(), codigo, numero, metodo });
-      console.log(`🧾 PWA: orden ${textoOrden(o.id)} · ${METODOS_PAGO[metodo]} · ${numero} · equipo ${codigo}`);
-      Promise.resolve().then(() => avisarOrden(o)).catch((err) => console.error(`❌ No se pudo avisar la orden ${textoOrden(o.id)}:`, err.message));
+      let token;
+      do token = tokenNuevo(); while (almacen.ordenPorToken(token));
+      o = almacen.crearOrden({ token, codigo, metodo });
+      console.log(`🧾 PWA: orden ${textoOrden(o.id)} creada · ${METODOS_PAGO[metodo]} · equipo ${codigo}`);
     }
-    return res.json({ orden: textoOrden(o.id), token: o.token });
+    return res.json({ orden: textoOrden(o.id), token: o.token, whatsapp, texto: textoPago(o.id, o.token) });
   });
 
   // POST /pwa/compra/estado {token} → {estado, orden} (+ clave, llave y nombre si fue aprobada)
   const compraEstado = ruta(TOPES.compraEstado, async ({ token }, res) => {
-    const o = almacen.ordenPorToken(String(token || ''));
+    const o = almacen.ordenPorToken(String(token || '').toUpperCase());
     if (!o) return res.json({ estado: 'desconocida' });
     const orden = textoOrden(o.id);
     if (o.estado !== 'aprobada') return res.json({ estado: o.estado, orden });
@@ -418,31 +438,75 @@ function crearServicio(almacen, { numeroBot, avisarOrden = async () => {} }) {
     return res.json({ estado: 'aprobada', orden, nombre: cuenta.nombre, clave: generarClave(cuenta.nombre, o.codigo), llave: llavePaquete() });
   });
 
-  /** El dueño confirmó el pago de la orden «id». Devuelve el texto para el dueño. */
+  /** Llegó «Pagué optiMAX…» desde «numero» (nombre = el del perfil de WhatsApp). Devuelve el texto para el cliente. */
+  function recibirPago(numero, nombre, token) {
+    const o = almacen.ordenPorToken(String(token).toUpperCase());
+    if (!o) return 'No encontré esa orden. Volvé a optiMAX, tocá «Ya pagué» de nuevo y mandá el mensaje que se abre.';
+    const t = textoOrden(o.id);
+    if (o.estado === 'esperando') {
+      nombre = normalizarNombre(nombre || '').slice(0, 60);
+      almacen.avisarPago(o.id, numero, nombre || null);
+      const av = almacen.orden(o.id);
+      console.log(`🧾 PWA: aviso de pago ${t} desde ${numero} (${nombre || 'sin nombre'})`);
+      Promise.resolve().then(() => avisarOrden(av)).catch((err) => console.error(`❌ No se pudo avisar la orden ${t}:`, err.message));
+      return `✓ Recibimos tu aviso de pago (orden ${t}).\n\nCuando confirmemos el pago, optiMAX PRO se activa sola en tu ` +
+        'equipo: no hace falta que hagas nada más. Si tenés el comprobante, podés mandarlo acá (foto o PDF).';
+    }
+    if (o.numero && o.numero !== numero) return `Esa orden (${t}) ya fue avisada desde otro número de WhatsApp.`;
+    if (o.estado === 'pendiente') return `Ya tenemos tu aviso de la orden ${t}. Cuando confirmemos el pago se activa sola.`;
+    if (o.estado === 'aprobada') return `La orden ${t} ya está confirmada: optiMAX PRO está activa en tu equipo.`;
+    return `No encontramos el pago de la orden ${t}. Si ya pagaste, mandá el comprobante acá (foto o PDF).`;
+  }
+
+  /** ¿A qué orden va una foto / PDF que mandó «numero»? La última avisada desde ese número en las últimas 72 h, o null. */
+  function ordenDeComprobante(numero, ahora = Date.now()) {
+    const o = almacen.ordenAvisadaDe(numero);
+    if (!o || ahora - new Date(o.avisada).getTime() > HORAS_COMPROBANTE * 3600 * 1000) return null;
+    return o;
+  }
+
+  /**
+   * El dueño confirmó el pago de la orden «id». → {texto (para el dueño), numero, cliente (texto para el cliente)};
+   * numero / cliente solo si se aprobó ahora.
+   */
   function aprobar(id) {
     const o = almacen.orden(id);
-    if (!o) return `No existe la orden ${textoOrden(id)}.`;
-    if (o.estado === 'aprobada') return `La orden ${textoOrden(id)} ya estaba aprobada.`;
-    if (o.estado === 'rechazada') return `La orden ${textoOrden(id)} estaba rechazada. Para habilitarla igual: /pwa Nombre ${o.numero}`;
-    if (!almacen.cuenta(o.numero)) almacen.guardarCuenta(o.numero, `Cliente ${numeroVisible(o.numero)}`);
+    const t = textoOrden(id);
+    if (!o) return { texto: `No existe la orden ${t}.` };
+    if (o.estado === 'esperando') return { texto: `La orden ${t} todavía no tiene el aviso del cliente por WhatsApp.` };
+    if (o.estado === 'aprobada') return { texto: `La orden ${t} ya estaba aprobada.` };
+    if (o.estado === 'rechazada') return { texto: `La orden ${t} estaba rechazada. Para habilitarla igual: /pwa Nombre ${o.numero}` };
+    if (!almacen.cuenta(o.numero)) almacen.guardarCuenta(o.numero, o.nombre || `Cliente ${numeroVisible(o.numero)}`);
     const { lista, reemplazado } = activarEquipo(o.numero, o.codigo);
     almacen.resolverOrden(id, 'aprobada');
-    console.log(`✅ PWA: orden ${textoOrden(id)} aprobada (${o.numero}, equipo ${o.codigo})`);
-    return `✓ ${textoOrden(id)} aprobada · ${numeroVisible(o.numero)} · el equipo se activa solo (${lista.length} de ${TOPE_EQUIPOS}).` +
-      (reemplazado ? ` Reemplazó al equipo ${reemplazado.codigo}.` : '');
+    console.log(`✅ PWA: orden ${t} aprobada (${o.numero}, equipo ${o.codigo})`);
+    return {
+      texto: `✓ ${t} aprobada · ${o.nombre ? `${o.nombre} · ` : ''}${numeroVisible(o.numero)} · el equipo se activa solo ` +
+        `(${lista.length} de ${TOPE_EQUIPOS}).` + (reemplazado ? ` Reemplazó al equipo ${reemplazado.codigo}.` : ''),
+      numero: o.numero,
+      cliente: `✓ Pago confirmado (orden ${t}). optiMAX PRO quedó activada en tu equipo: abrí optiMAX y ya la tenés.\n\n` +
+        `Sirve en ${TOPE_EQUIPOS} equipos con este número de WhatsApp. En otro equipo (o si cambiás de celular): optiMAX → ` +
+        '«Comprar PRO» → «Ya compré: activar» → «Entrar con WhatsApp».',
+    };
   }
 
-  /** El dueño rechazó la orden «id» (no entró el pago). */
+  /** El dueño rechazó la orden «id» (no entró el pago). → {texto, numero?, cliente?} como aprobar. */
   function rechazar(id) {
     const o = almacen.orden(id);
-    if (!o) return `No existe la orden ${textoOrden(id)}.`;
-    if (o.estado !== 'pendiente') return `La orden ${textoOrden(id)} ya estaba ${o.estado}.`;
+    const t = textoOrden(id);
+    if (!o) return { texto: `No existe la orden ${t}.` };
+    if (o.estado === 'aprobada' || o.estado === 'rechazada') return { texto: `La orden ${t} ya estaba ${o.estado}.` };
     almacen.resolverOrden(id, 'rechazada');
-    console.log(`🚫 PWA: orden ${textoOrden(id)} rechazada`);
-    return `${textoOrden(id)} rechazada. En la app le aparece que no encontramos el pago.`;
+    console.log(`🚫 PWA: orden ${t} rechazada`);
+    if (!o.numero) return { texto: `${t} rechazada (el cliente no había mandado el aviso).` };
+    return {
+      texto: `${t} rechazada. Al cliente le llega que no encontramos el pago.`,
+      numero: o.numero,
+      cliente: `No encontramos el pago de la orden ${t}. Si ya pagaste, mandá el comprobante acá (foto o PDF) y lo revisamos.`,
+    };
   }
 
-  return { recibirIngreso, ingreso, estado, equipo, compra, compraEstado, aprobar, rechazar, _ingresos: ingresos };
+  return { recibirIngreso, ingreso, estado, equipo, compra, compraEstado, recibirPago, ordenDeComprobante, aprobar, rechazar, _ingresos: ingresos };
 }
 
 module.exports = {
@@ -452,6 +516,8 @@ module.exports = {
   textoOrden,
   idOrden,
   avisoOrden,
+  esPago,
+  textoPago,
   normalizarCodigo,
   extraerCodigo,
   normalizarNombre,
